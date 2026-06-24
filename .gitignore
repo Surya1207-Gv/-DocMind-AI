@@ -1,0 +1,37 @@
+# Environment Secrets
+.env
+backend/.env
+
+# Python files
+__pycache__/
+*.py[cod]
+*$py.class
+venv/
+backend/venv/
+
+# Node files
+node_modules/
+dist/
+dist-ssr/
+*.local
+
+# FAISS Indices
+backend/faiss_indices/
+
+# Document Uploads
+backend/uploads/
+backend/metadata.json
+
+# Logs
+*.log
+
+# Editor configurations
+.vscode/
+.idea/
+.project
+.pydevproject
+.settings/
+
+# OS files
+.DS_Store
+Thumbs.db
