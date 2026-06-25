@@ -70,11 +70,11 @@ export default function MessageBubble({ message }) {
         </div>
 
         {/* If AI Response has sources and confidence, display them */}
-        {!isUser && message.confidence !== undefined && message.confidence > 0 && (
+        {!isUser && !message.generating && message.confidence !== undefined && message.confidence > 0 && (
           <ConfidenceMeter confidence={message.confidence} confidenceLabel={message.confidence_label} />
         )}
 
-        {!isUser && message.sources && message.sources.length > 0 && (
+        {!isUser && !message.generating && message.sources && message.sources.length > 0 && (
           <div className="message-sources">
             {message.sources.map((source, idx) => (
               <SourceCard key={idx} source={source} />

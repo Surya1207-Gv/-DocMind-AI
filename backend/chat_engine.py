@@ -33,26 +33,36 @@ SYSTEM_PROMPTS = {
         "At the very end of your response, on a new line, write 'Cited Source Indices: ' followed by a comma-separated list of the Source Index numbers you actually used in your answer (e.g. Cited Source Indices: 1, 2). Do not include any other text on this line.\n"
     ),
     "summary": (
+    "You are a document summarizer. Provide an ultra‑concise summary of the retrieved information.\\n"
+    "Rules:\\n"
+    "- Limit to 2 sentences maximum.\\n"
+    "- Capture only the core idea.\\n"
+    "- Merge related points.\\n"
+    "- Do not include definitions or quotations unless essential.\\n"
+    "- End with 'Cited Source Indices: ...' on a new line.\\n"
+),
         "You are a document summarizer. Summarize the retrieved information instead of answering line-by-line.\n"
         "Rules:\n"
-        "- 2-4 sentences.\n"
+        "- Maximum 2-3 sentences. Keep it very concise.\n"
         "- Focus on the main idea.\n"
         "- Combine related information.\n"
         "- Avoid quoting definitions unless necessary.\n"
-        "- Make the answer concise.\n"
         "At the very end of your response, on a new line, write 'Cited Source Indices: ' followed by a comma-separated list of the Source Index numbers you actually used in your answer (e.g. Cited Source Indices: 1, 2). Do not include any other text on this line.\n"
     ),
     "deep": (
-        "You are an expert AI researcher. Using ONLY the retrieved document:\n"
-        "1. Answer the question.\n"
-        "2. Explain WHY.\n"
-        "3. Explain HOW.\n"
-        "4. Mention related concepts.\n"
-        "5. Mention examples from the document.\n"
-        "6. Connect information from multiple retrieved chunks.\n"
-        "7. Structure the answer using headings and bullet points.\n\n"
-        "Length:\n"
-        "250-500 words.\n"
+        "You are an expert AI researcher. Using ONLY the retrieved document, provide a comprehensive, multi-section analysis.\n"
+        "Rules:\n"
+        "- Structure the answer using proper Markdown headers and bullet points exactly like this:\n"
+        "  ## [Section title describing WHY]\n"
+        "  ...\n"
+        "  ## [Section title describing HOW]\n"
+        "  ...\n"
+        "  ### [Subsection title describing related concepts / details]\n"
+        "  ...\n"
+        "  ### Examples\n"
+        "  ...\n"
+        "- Connect information from multiple retrieved chunks.\n"
+        "- Length: 250-500 words.\n"
         "At the very end of your response, on a new line, write 'Cited Source Indices: ' followed by a comma-separated list of the Source Index numbers you actually used in your answer (e.g. Cited Source Indices: 1, 2). Do not include any other text on this line.\n"
     ),
     "eli5": (
@@ -240,10 +250,10 @@ def run_chat(request: ChatRequest) -> ChatResponse:
     # Check for non-retrieval classifications:
     if cls_type == "CONVERSATIONAL":
         system_prompt = (
-            "You are DocMind AI, a friendly and intelligent document analysis assistant.\n"
+            "You are DocMind, a friendly and intelligent document analysis assistant.\n"
             "You help users analyze documents, extract summaries, generate quizzes, and compare cross-references.\n"
             "Since the user just greeted you or asked a general conversational question, respond in a friendly, polite, and brief manner.\n"
-            "Let them know you are DocMind AI and are ready to help them analyze the uploaded documents once they select or ask about them."
+            "Let them know you are DocMind and are ready to help them analyze the uploaded documents once they select or ask about them."
         )
         messages = [SystemMessage(content=system_prompt)]
         if request.history:
@@ -265,9 +275,9 @@ def run_chat(request: ChatRequest) -> ChatResponse:
                     response = fallback_llm.invoke(messages)
                     answer = response.content
                 except Exception as e_fallback:
-                    answer = f"Error communicating with DocMind AI: {str(e_fallback)}"
+                    answer = f"Error communicating with DocMind: {str(e_fallback)}"
             else:
-                answer = f"Error communicating with DocMind AI: {str(e)}"
+                answer = f"Error communicating with DocMind: {str(e)}"
         
         return ChatResponse(
             answer=answer,
@@ -401,9 +411,9 @@ def run_chat(request: ChatRequest) -> ChatResponse:
                 response = fallback_llm.invoke(messages)
                 answer = response.content
             except Exception as e_fallback:
-                answer = f"Error communicating with DocMind AI: {str(e_fallback)}"
+                answer = f"Error communicating with DocMind: {str(e_fallback)}"
         else:
-            answer = f"Error communicating with DocMind AI: {str(e)}"
+            answer = f"Error communicating with DocMind: {str(e)}"
         
     # Extract cited source indices and clean up answer
     import re
@@ -461,10 +471,10 @@ def run_chat_stream(request: ChatRequest, user_id: str):
     
     if cls_type == "CONVERSATIONAL":
         system_prompt = (
-            "You are DocMind AI, a friendly and intelligent document analysis assistant.\n"
+            "You are DocMind, a friendly and intelligent document analysis assistant.\n"
             "You help users analyze documents, extract summaries, generate quizzes, and compare cross-references.\n"
             "Since the user just greeted you or asked a general conversational question, respond in a friendly, polite, and brief manner.\n"
-            "Let them know you are DocMind AI and are ready to help them analyze the uploaded documents once they select or ask about them."
+            "Let them know you are DocMind and are ready to help them analyze the uploaded documents once they select or ask about them."
         )
         messages_list = [SystemMessage(content=system_prompt)]
         if request.history:
@@ -741,7 +751,7 @@ def run_chat_stream(request: ChatRequest, user_id: str):
                                 except Exception:
                                     pass
                 except Exception as e_fallback:
-                    err_msg = f"Error communicating with DocMind AI: {str(e_fallback)}"
+                    err_msg = f"Error communicating with DocMind: {str(e_fallback)}"
                     yield f"data: {json.dumps({'type': 'token', 'text': err_msg})}\n\n"
                     stream_answer += err_msg
             else:
@@ -792,7 +802,7 @@ def run_chat_stream(request: ChatRequest, user_id: str):
                         except Exception:
                             pass
         except Exception as e:
-            err_msg = f"Error communicating with DocMind AI: {str(e)}"
+            err_msg = f"Error communicating with DocMind: {str(e)}"
             yield f"data: {json.dumps({'type': 'token', 'text': err_msg})}\n\n"
             stream_answer += err_msg
 

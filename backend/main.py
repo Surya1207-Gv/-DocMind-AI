@@ -25,7 +25,7 @@ from backend.compare_engine import compare_documents
 from backend.auth import get_current_user, hash_password, verify_password, create_access_token
 import backend.database as db
 
-app = FastAPI(title="DocMind AI - Backend API")
+app = FastAPI(title="DocMind - Backend API")
 
 # Configure CORS
 app.add_middleware(
@@ -119,7 +119,7 @@ def health_check():
 @app.get("/")
 def read_root():
     return {
-        "message": "Welcome to DocMind AI API.",
+        "message": "Welcome to DocMind API.",
         "web_interface": "http://localhost:5173",
         "api_docs": "/docs",
         "health_check": "/api/health"

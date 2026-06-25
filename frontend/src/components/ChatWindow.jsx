@@ -52,36 +52,6 @@ export default function ChatWindow({
             <span className="header-title">
               {activeDoc ? activeDoc.name : "Global Chat Mode"}
             </span>
-            {activeDoc && (
-              <button
-                onClick={onCloseChat}
-                style={{
-                  background: "transparent",
-                  border: "none",
-                  color: "var(--text-muted)",
-                  cursor: "pointer",
-                  fontSize: "12px",
-                  padding: "4px",
-                  lineHeight: 1,
-                  display: "flex",
-                  alignItems: "center",
-                  justifyContent: "center",
-                  borderRadius: "50%",
-                  transition: "background 0.2s, color 0.2s",
-                }}
-                onMouseEnter={(e) => {
-                  e.currentTarget.style.background = "rgba(239, 68, 68, 0.15)";
-                  e.currentTarget.style.color = "var(--color-error)";
-                }}
-                onMouseLeave={(e) => {
-                  e.currentTarget.style.background = "transparent";
-                  e.currentTarget.style.color = "var(--text-muted)";
-                }}
-                title="Close chat and go back"
-              >
-                ❌
-              </button>
-            )}
           </div>
           <span className="header-subtitle">
             {activeDoc
@@ -90,13 +60,12 @@ export default function ChatWindow({
           </span>
         </div>
 
-        <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
+        <div className="header-actions-container" style={{ display: "flex", alignItems: "center", gap: "12px" }}>
           {activeDoc && (
             <>
               {messages.length > 0 && (
                 <button
                   className="btn-action-outline"
-                  style={{ fontSize: "11px", padding: "6px 10px", margin: 0 }}
                   onClick={onClearHistory}
                 >
                   🧹 Clear Chat
@@ -109,19 +78,17 @@ export default function ChatWindow({
               />
               <button
                 className={`btn-action-outline ${showInsights ? "active" : ""}`}
-                style={{ fontSize: "11px", padding: "6px 10px", margin: 0, display: "flex", alignItems: "center", gap: "6px" }}
                 onClick={onToggleInsights}
                 title="Toggle Insights Panel"
               >
-                {showInsights ? "👁️ Hide Panel" : "📊 Show Panel"}
+                👁️ Hide Panel
               </button>
               <button
                 className="btn-action-outline"
-                style={{ fontSize: "11px", padding: "6px 10px", margin: 0, display: "flex", alignItems: "center", gap: "6px" }}
                 onClick={onCloseChat}
                 title="Close this chat session"
               >
-                ❌ Close Chat
+                Close Chat 🚪
               </button>
             </>
           )}
@@ -145,7 +112,7 @@ export default function ChatWindow({
       <div className="message-list">
         {messages.length === 0 ? (
           <div className="welcome-screen">
-            <h1 className="welcome-title">DocMind AI</h1>
+            <h1 className="welcome-title">DocMind</h1>
             <p className="welcome-desc">
               An advanced Document Intelligence Platform. Upload complex PDF documents
               to extract deep insights, generate MCQs, compare cross-references, and
@@ -175,9 +142,9 @@ export default function ChatWindow({
               </div>
               <div className="welcome-feat-card">
                 <div className="welcome-feat-icon">💬</div>
-                <div className="welcome-feat-title">4 Chat Modes</div>
+                <div className="welcome-feat-title">4 Specialized Chat Modes</div>
                 <div className="welcome-feat-desc">
-                  Toggle Q&A, detailed analytics, summaries, or ELI5 explanations.
+                  <strong>Q&A</strong> (Direct facts) • <strong>Summary</strong> (Outlines & key takeaways) • <strong>Deep</strong> (Comprehensive analysis) • <strong>ELI5</strong> (Simple analogies)
                 </div>
               </div>
             </div>

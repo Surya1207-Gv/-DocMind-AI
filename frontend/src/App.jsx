@@ -39,6 +39,8 @@ export default function App() {
   // Layout resizing states
   const [sidebarWidth, setSidebarWidth] = useState(280);
   const [insightsWidth, setInsightsWidth] = useState(380);
+  const [isResizingSidebar, setIsResizingSidebar] = useState(false);
+  const [isResizingInsights, setIsResizingInsights] = useState(false);
   
   // Document IDs with active chats
   const [activeChats, setActiveChats] = useState([]);
@@ -58,6 +60,7 @@ export default function App() {
   const handleSidebarResizeStart = (e) => {
     e.preventDefault();
     resizeState.current.isResizingSidebar = true;
+    setIsResizingSidebar(true);
     document.addEventListener("mousemove", handleMouseMove);
     document.addEventListener("mouseup", handleMouseUp);
   };
@@ -65,6 +68,7 @@ export default function App() {
   const handleInsightsResizeStart = (e) => {
     e.preventDefault();
     resizeState.current.isResizingInsights = true;
+    setIsResizingInsights(true);
     document.addEventListener("mousemove", handleMouseMove);
     document.addEventListener("mouseup", handleMouseUp);
   };
@@ -82,6 +86,8 @@ export default function App() {
   const handleMouseUp = () => {
     resizeState.current.isResizingSidebar = false;
     resizeState.current.isResizingInsights = false;
+    setIsResizingSidebar(false);
+    setIsResizingInsights(false);
     document.removeEventListener("mousemove", handleMouseMove);
     document.removeEventListener("mouseup", handleMouseUp);
   };
@@ -475,6 +481,7 @@ export default function App() {
       content: "",
       confidence: 0,
       sources: [],
+      generating: true,
       timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
     };
 
@@ -579,6 +586,18 @@ export default function App() {
       addToast("Failed to generate response. Check backend connection.", "error");
     } finally {
       setChatLoading(false);
+      setChats((prev) => {
+        if (!activeDocId || !prev[activeDocId]) return prev;
+        const historyCopy = [...prev[activeDocId]];
+        const idx = historyCopy.length - 1;
+        if (idx >= 0 && historyCopy[idx].role === "assistant") {
+          historyCopy[idx] = {
+            ...historyCopy[idx],
+            generating: false,
+          };
+        }
+        return { ...prev, [activeDocId]: historyCopy };
+      });
       loadActiveChats();
     }
   };
@@ -754,16 +773,8 @@ export default function App() {
       />
 
       <div
-        className="layout-divider sidebar-divider"
+        className={`layout-divider sidebar-divider ${isResizingSidebar ? "active" : ""}`}
         onMouseDown={handleSidebarResizeStart}
-        style={{
-          width: "6px",
-          cursor: "col-resize",
-          height: "100%",
-          zIndex: 100,
-          background: "transparent",
-          transition: "background 0.2s",
-        }}
       />
 
       <ChatWindow
@@ -786,16 +797,8 @@ export default function App() {
 
       {showInsights && (
         <div
-          className="layout-divider insights-divider"
+          className={`layout-divider insights-divider ${isResizingInsights ? "active" : ""}`}
           onMouseDown={handleInsightsResizeStart}
-          style={{
-            width: "6px",
-            cursor: "col-resize",
-            height: "100%",
-            zIndex: 100,
-            background: "transparent",
-            transition: "background 0.2s",
-          }}
         />
       )}
 

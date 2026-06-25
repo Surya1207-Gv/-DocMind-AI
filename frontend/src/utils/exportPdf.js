@@ -8,7 +8,7 @@ export const exportChatToPdf = (messages, docName) => {
   doc.setFont("helvetica", "bold");
   doc.setFontSize(18);
   doc.setTextColor(20, 184, 166); // Accent teal
-  doc.text("DocMind AI - Chat Export", 20, y);
+  doc.text("DocMind - Chat Export", 20, y);
   
   y += 8;
   doc.setFont("helvetica", "normal");

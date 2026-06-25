@@ -26,8 +26,7 @@ export default function Sidebar({
   return (
     <aside className="sidebar">
       <div className="logo-section">
-        <div className="logo-icon">🧠</div>
-        <span className="logo-text">DocMind AI</span>
+        <span className="logo-text">DocMind</span>
       </div>
 
       {/* Scrollable Container for lists */}

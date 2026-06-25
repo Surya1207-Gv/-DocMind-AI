@@ -14,8 +14,8 @@ export default function ConfidenceMeter({ confidence, confidenceLabel }) {
   const widthVal = confidence || (label === "High" ? 90 : (label === "Medium" ? 65 : 35));
 
   return (
-    <div className="confidence-display" title={`AI Confidence: ${label} (Score: ${confidence || 0}%)`}>
-      <span>AI Confidence:</span>
+    <div className="confidence-display" title={`Confidence: ${label} (Score: ${confidence || 0}%)`}>
+      <span>Confidence:</span>
       <div className="confidence-bar-bg">
         <div
           className="confidence-bar-fill"

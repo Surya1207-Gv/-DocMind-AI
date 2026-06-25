@@ -69,8 +69,7 @@ export default function LandingPage({ onLogin, onSignup }) {
       {/* NAV */}
       <nav className="lp-nav">
         <div className="lp-nav-logo">
-          <span className="lp-logo-icon">🧠</span>
-          <span className="lp-logo-text">DocMind AI</span>
+          <span className="lp-logo-text">DocMind</span>
         </div>
         <div className="lp-nav-actions">
           <button className="lp-btn-ghost" onClick={onLogin}>Sign In</button>
@@ -106,7 +105,7 @@ export default function LandingPage({ onLogin, onSignup }) {
           Unlock the Power of Your Documents
         </h2>
         <p className="lp-section-sub lp-fade-up">
-          Go beyond simple search. DocMind AI extracts, summarizes, compares, and explains your files
+          Go beyond simple search. DocMind extracts, summarizes, compares, and explains your files
           with incredible precision and smart insights.
         </p>
         <div className="lp-features-grid">
@@ -150,9 +149,8 @@ export default function LandingPage({ onLogin, onSignup }) {
         </button>
       </section>
 
-      {/* FOOTER */}
       <footer className="lp-footer">
-        <span className="lp-logo-text" style={{ opacity: 0.5 }}>🧠 DocMind AI</span>
+        <span className="lp-logo-text" style={{ opacity: 0.5 }}>DocMind</span>
         <span style={{ opacity: 0.35, fontSize: "12px" }}>
           Intelligent Document AI • Built by Surya Sasank
         </span>

@@ -1,6 +1,6 @@
 @echo off
 echo ===================================================
-echo               DocMind AI RAG Chatbot
+echo               DocMind RAG Chatbot
 echo                Launcher for Windows
 echo ===================================================
 echo.
