@@ -319,11 +319,38 @@ def search_index(query: str, doc_ids: List[str], top_k: int = 4) -> List[Tuple[A
     # distance = 2.0 * (1.0 - hybrid_score)
     # Filter out low-relevance references below 50% Match
     final_results = []
+    seen_chunks = set()
     for doc, _, hybrid_score in scored_candidates[:top_k]:
         if hybrid_score < 0.50:
             continue
+            
+        doc_id = doc.metadata.get("doc_id")
+        chunk_idx = doc.metadata.get("chunk_index")
+        
+        if (doc_id, chunk_idx) in seen_chunks:
+            continue
+        seen_chunks.add((doc_id, chunk_idx))
+        
+        expanded_content = doc.page_content
+        
+        # Pull next adjacent chunk to make context cohesive and complete sentences
+        if doc_id and chunk_idx is not None:
+            next_idx = chunk_idx + 1
+            next_chunk = None
+            for d in main_vector_store.docstore._dict.values():
+                if d.metadata.get("doc_id") == doc_id and d.metadata.get("chunk_index") == next_idx:
+                    next_chunk = d
+                    break
+            if next_chunk:
+                sep = "\n" if not expanded_content.endswith("\n") else ""
+                expanded_content += sep + next_chunk.page_content
+                seen_chunks.add((doc_id, next_idx))
+                
+        from langchain_core.documents import Document
+        expanded_doc = Document(page_content=expanded_content, metadata=doc.metadata)
+        
         simulated_distance = 2.0 * (1.0 - hybrid_score)
-        final_results.append((doc, simulated_distance))
+        final_results.append((expanded_doc, simulated_distance))
         
     return final_results
 

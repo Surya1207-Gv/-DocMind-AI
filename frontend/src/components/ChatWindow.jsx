@@ -186,7 +186,7 @@ export default function ChatWindow({
           messages.map((msg, idx) => <MessageBubble key={msg.id || idx} message={msg} />)
         )}
 
-        {loading && (
+        {loading && (messages.length === 0 || messages[messages.length - 1].role !== "assistant") && (
           <div className="message-wrapper assistant">
             <div className="avatar">AI</div>
             <div className="message-content-container">

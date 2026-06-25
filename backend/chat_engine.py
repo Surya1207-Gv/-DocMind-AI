@@ -1,66 +1,67 @@
 import os
 import json
-from typing import List, Dict, Any, Tuple, Optional
+from typing import List, Dict, Any, Tuple, Optional, Callable
 import requests
 from langchain_core.language_models.chat_models import BaseChatModel
 from langchain_core.messages import BaseMessage, AIMessage, HumanMessage, SystemMessage
 from langchain_core.outputs import ChatResult, ChatGeneration
-from backend.config import OPENROUTER_API_KEY, LLM_MODEL, TOP_K
+
+# Monkey patch langchain_google_genai to prevent infinite exponential backoff retry loops on quota/rate-limits
+try:
+    import langchain_google_genai.chat_models
+    from tenacity import retry, stop_after_attempt
+    def _no_retry_decorator() -> Callable[[Any], Any]:
+        return retry(reraise=True, stop=stop_after_attempt(1))
+    langchain_google_genai.chat_models._create_retry_decorator = _no_retry_decorator
+except Exception as e:
+    print(f"Error applying langchain_google_genai retry monkey patch: {e}")
+
+from backend.config import GEMINI_API_KEY, OPENROUTER_API_KEY, LLM_MODEL, TOP_K
 from backend.models import ChatRequest, ChatResponse, SourceChunk, ChatMessage
 from backend.embedding_manager import search_index
 
 # System Prompts for Different Modes
 SYSTEM_PROMPTS = {
     "qa": (
-        "You are an expert document assistant. Answer the user's question accurately based ONLY on the provided document contexts.\n"
-        "CRITICAL: Rely strictly and directly on facts, definitions, and wording found in the CONTEXT. Do NOT make up facts or introduce outside/external knowledge.\n"
-        "DIFFERENTIATE YOUR ANSWER INTO THREE CASES:\n"
-        "1. CASE A (Explicit Answer): If the context contains the explicit answer to the user's question, provide a clear, direct, and factual answer based strictly on the context.\n"
-        "2. CASE B (Related Info Exists): If the context contains information related to the topic of the query but does NOT explicitly answer the specific question asked, state clearly that while the document references a related topic, the specific answer to your question is not mentioned. Offer to summarize the related information if relevant.\n"
-        "3. CASE C (Not Present): If the answer is completely missing or unrelated, reply with exactly: 'I cannot find that information in the uploaded documents.'\n\n"
-        "TECHNICAL PRECISION:\n"
-        "1. Do not equate Generative AI with foundation models. State clearly that foundation models are an example of generative AI models, trained on a broad data set and applicable to a wide range of tasks.\n"
-        "2. Focus strictly on defining the concept and do not append detailed lists of specific applications (such as website building, video editing, or venture capital investment figures) unless the user explicitly asks for applications.\n"
-        "3. Every sentence in your response must be supported by at least one retrieved chunk. If no chunk supports a statement, omit it completely.\n"
+        "You are a document question-answering assistant. Answer ONLY the user's question using the retrieved document context.\n"
+        "Rules:\n"
+        "- Keep the answer between 50 and 120 words.\n"
+        "- Do not explain unrelated concepts.\n"
+        "- Do not add background information unless necessary.\n"
+        "- Answer directly.\n"
+        "- If the answer isn't in the document, say so.\n"
         "At the very end of your response, on a new line, write 'Cited Source Indices: ' followed by a comma-separated list of the Source Index numbers you actually used in your answer (e.g. Cited Source Indices: 1, 2). Do not include any other text on this line.\n"
     ),
     "summary": (
-        "You are an expert summarizer. Answer the user's question by summarizing the key points based ONLY on the provided document contexts.\n"
-        "CRITICAL: Rely strictly on facts directly mentioned in the CONTEXT. Do not use outside/external knowledge.\n"
-        "DIFFERENTIATE YOUR ANSWER INTO THREE CASES:\n"
-        "1. CASE A (Explicit Answer): Summarize the relevant details from the context clearly and concisely using clean bullet points and bold headers.\n"
-        "2. CASE B (Related Info Exists): If the context contains related information but does not directly answer the user's query, state that the specific summary is unavailable but offer a summary of the related info that is present in the context.\n"
-        "3. CASE C (Not Present): If no relevant info is present, reply with exactly: 'I cannot find that information in the uploaded documents.'\n\n"
-        "TECHNICAL PRECISION:\n"
-        "1. Do not equate Generative AI with foundation models. State clearly that foundation models are an example of generative AI models, trained on a broad data set and applicable to a wide range of tasks.\n"
-        "2. Focus strictly on defining the concept and do not append detailed lists of specific applications (such as website building, video editing, or venture capital investment figures) unless the user explicitly asks for applications.\n"
-        "3. Every sentence in your response must be supported by at least one retrieved chunk. If no chunk supports a statement, omit it completely.\n"
+        "You are a document summarizer. Summarize the retrieved information instead of answering line-by-line.\n"
+        "Rules:\n"
+        "- 2-4 sentences.\n"
+        "- Focus on the main idea.\n"
+        "- Combine related information.\n"
+        "- Avoid quoting definitions unless necessary.\n"
+        "- Make the answer concise.\n"
         "At the very end of your response, on a new line, write 'Cited Source Indices: ' followed by a comma-separated list of the Source Index numbers you actually used in your answer (e.g. Cited Source Indices: 1, 2). Do not include any other text on this line.\n"
     ),
     "deep": (
-        "You are an advanced analyst. Provide a deep, step-by-step analytical answer based ONLY on the provided document contexts.\n"
-        "CRITICAL: Rely strictly on facts directly mentioned in the CONTEXT. Do not use outside/external knowledge.\n"
-        "DIFFERENTIATE YOUR ANSWER INTO THREE CASES:\n"
-        "1. CASE A (Explicit Answer): Analyze the details in-depth, explaining reasoning, citing sections, and exploring implications step-by-step based on the context.\n"
-        "2. CASE B (Related Info Exists): If the context contains related information but does not explicitly answer the user's question, explain what related context is available, why the specific answer is missing, and analyze the related implications.\n"
-        "3. CASE C (Not Present): If the context has no relevant info, reply with exactly: 'I cannot find that information in the uploaded documents.'\n\n"
-        "TECHNICAL PRECISION:\n"
-        "1. Do not equate Generative AI with foundation models. State clearly that foundation models are an example of generative AI models, trained on a broad data set and applicable to a wide range of tasks.\n"
-        "2. Focus strictly on defining the concept and do not append detailed lists of specific applications (such as website building, video editing, or venture capital investment figures) unless the user explicitly asks for applications.\n"
-        "3. Every sentence in your response must be supported by at least one retrieved chunk. If no chunk supports a statement, omit it completely.\n"
+        "You are an expert AI researcher. Using ONLY the retrieved document:\n"
+        "1. Answer the question.\n"
+        "2. Explain WHY.\n"
+        "3. Explain HOW.\n"
+        "4. Mention related concepts.\n"
+        "5. Mention examples from the document.\n"
+        "6. Connect information from multiple retrieved chunks.\n"
+        "7. Structure the answer using headings and bullet points.\n\n"
+        "Length:\n"
+        "250-500 words.\n"
         "At the very end of your response, on a new line, write 'Cited Source Indices: ' followed by a comma-separated list of the Source Index numbers you actually used in your answer (e.g. Cited Source Indices: 1, 2). Do not include any other text on this line.\n"
     ),
     "eli5": (
-        "You are a helpful teacher. Explain the answer to the user's question like they are 5 years old, based ONLY on the provided document contexts.\n"
-        "CRITICAL: Rely strictly on facts directly mentioned in the CONTEXT. Do not use outside/external knowledge.\n"
-        "DIFFERENTIATE YOUR ANSWER INTO THREE CASES:\n"
-        "1. CASE A (Explicit Answer): Explain the answer using very simple terms, plain language, and clear analogies like the user is 5 years old.\n"
-        "2. CASE B (Related Info Exists): Explain that the exact answer is not in the documents, but tell a simple story/analogy about the related information that is in the documents.\n"
-        "3. CASE C (Not Present): If no relevant info exists, reply with exactly: 'I cannot find that information in the uploaded documents.'\n\n"
-        "TECHNICAL PRECISION:\n"
-        "1. Do not equate Generative AI with foundation models. State clearly that foundation models are an example of generative AI models, trained on a broad data set and applicable to a wide range of tasks.\n"
-        "2. Focus strictly on defining the concept and do not append detailed lists of specific applications (such as website building, video editing, or venture capital investment figures) unless the user explicitly asks for applications.\n"
-        "3. Every sentence in your response must be supported by at least one retrieved chunk. If no chunk supports a statement, omit it completely.\n"
+        "Explain the answer as if speaking to a 10-year-old using ONLY the retrieved document.\n"
+        "Rules:\n"
+        "- Use everyday language.\n"
+        "- Use one analogy.\n"
+        "- No technical jargon.\n"
+        "- Maximum 150 words.\n"
         "At the very end of your response, on a new line, write 'Cited Source Indices: ' followed by a comma-separated list of the Source Index numbers you actually used in your answer (e.g. Cited Source Indices: 1, 2). Do not include any other text on this line.\n"
     )
 }
@@ -105,14 +106,35 @@ class OpenRouterChat(BaseChatModel):
     def _llm_type(self) -> str:
         return "openrouter-chat"
 
-def get_llm_model():
-    if not OPENROUTER_API_KEY:
-        raise ValueError("OPENROUTER_API_KEY environment variable is not set. Please set it in your .env file.")
-    return OpenRouterChat(
-        model=LLM_MODEL,
-        api_key=OPENROUTER_API_KEY,
-        temperature=0.2
-    )
+def get_mode_temperature(mode: str) -> float:
+    if mode == "qa":
+        return 0.2
+    elif mode == "summary":
+        return 0.3
+    elif mode == "deep":
+        return 0.5
+    elif mode == "eli5":
+        return 0.6
+    return 0.2
+
+def get_llm_model(temperature: float = 0.2):
+    if GEMINI_API_KEY:
+        from langchain_google_genai import ChatGoogleGenerativeAI
+        return ChatGoogleGenerativeAI(
+            model="gemini-2.5-flash",
+            google_api_key=GEMINI_API_KEY,
+            temperature=temperature,
+            max_retries=0,
+            convert_system_message_to_human=True
+        )
+    else:
+        if not OPENROUTER_API_KEY:
+            raise ValueError("Neither GEMINI_API_KEY nor OPENROUTER_API_KEY is configured in your .env file.")
+        return OpenRouterChat(
+            model=LLM_MODEL,
+            api_key=OPENROUTER_API_KEY,
+            temperature=temperature
+        )
 
 def check_conversational(query: str) -> bool:
     q = query.strip().lower().replace("?", "").replace("!", "").replace(".", "").replace(",", "")
@@ -196,54 +218,11 @@ def classify_and_normalize_question(question: str) -> Dict[str, Any]:
             "explanation": "Extremely short or single-word query is ambiguous."
         }
 
-    headers = {
-        "Authorization": f"Bearer {OPENROUTER_API_KEY}",
-        "Content-Type": "application/json"
-    }
-    
-    payload = {
-        "model": LLM_MODEL,
-        "messages": [
-            {"role": "system", "content": "You are a precise classifier that outputs only valid JSON."},
-            {"role": "user", "content": CLASSIFY_PROMPT.format(question=question)}
-        ],
-        "temperature": 0.0
-    }
-
-    try:
-        response = requests.post(
-            "https://openrouter.ai/api/v1/chat/completions",
-            headers=headers,
-            json=payload,
-            timeout=5.0
-        )
-        response.raise_for_status()
-        res_data = response.json()
-        res_text = res_data["choices"][0]["message"]["content"].strip()
-        
-        # Clean potential markdown wrappers
-        if res_text.startswith("```"):
-            lines = res_text.splitlines()
-            if lines[0].startswith("```json") or lines[0].startswith("```"):
-                lines = lines[1:]
-            if lines and lines[-1].startswith("```"):
-                lines = lines[:-1]
-            res_text = "\n".join(lines).strip()
-            
-        data = json.loads(res_text)
-        if "classification" in data and "corrected_query" in data:
-            cls = data["classification"].upper().strip()
-            if cls in ["CONVERSATIONAL", "TYPO", "AMBIGUOUS", "OUT_OF_SCOPE", "FACTUAL", "SUMMARY", "REASONING"]:
-                data["classification"] = cls
-                return data
-    except Exception as e:
-        print(f"[Classifier] Error or timeout during classification: {e}")
-
-    # Default fallback
+    # Bypass LLM-based classification call directly to save latency and avoid false OUT_OF_SCOPE / AMBIGUOUS categorizations
     return {
         "classification": "FACTUAL",
         "corrected_query": question,
-        "explanation": "Defaulted to FACTUAL because classification failed or timed out."
+        "explanation": "Bypassed LLM classification to reduce latency."
     }
 
 
@@ -276,7 +255,19 @@ def run_chat(request: ChatRequest) -> ChatResponse:
             response = get_llm_model().invoke(messages)
             answer = response.content
         except Exception as e:
-            answer = f"Error communicating with DocMind AI: {str(e)}"
+            if GEMINI_API_KEY and OPENROUTER_API_KEY:
+                try:
+                    fallback_llm = OpenRouterChat(
+                        model=LLM_MODEL,
+                        api_key=OPENROUTER_API_KEY,
+                        temperature=0.2
+                    )
+                    response = fallback_llm.invoke(messages)
+                    answer = response.content
+                except Exception as e_fallback:
+                    answer = f"Error communicating with DocMind AI: {str(e_fallback)}"
+            else:
+                answer = f"Error communicating with DocMind AI: {str(e)}"
         
         return ChatResponse(
             answer=answer,
@@ -311,8 +302,18 @@ def run_chat(request: ChatRequest) -> ChatResponse:
     if cls_type == "TYPO" and normalized_q.strip().lower() != request.question.strip().lower():
         prefix_note = f"*(Interpreted as: \"{normalized_q}\")*\n\n"
 
+    # Determine dynamic top_k based on mode
+    if request.mode == "qa":
+        mode_top_k = 3
+    elif request.mode == "summary":
+        mode_top_k = 5
+    elif request.mode == "deep":
+        mode_top_k = 9  # 8 to 10 chunks
+    else:
+        mode_top_k = 5  # default/eli5
+
     # Search vector index using the normalized query!
-    search_results = search_index(normalized_q, request.doc_ids, top_k=TOP_K)
+    search_results = search_index(normalized_q, request.doc_ids, top_k=mode_top_k)
     
     # If no results found, or all scores are below 0.65 threshold (meaning search_results is empty)
     if not search_results:
@@ -355,15 +356,28 @@ def run_chat(request: ChatRequest) -> ChatResponse:
     confidence_label = "High" if confidence >= 80 else ("Medium" if confidence >= 65 else "Low")
     
     system_prompt = SYSTEM_PROMPTS.get(request.mode, SYSTEM_PROMPTS["qa"])
+    
+    if request.mode == "eli5":
+        critical_rule = (
+            "CRITICAL RULE: Explain the facts from the CONTEXT above using very simple child-friendly analogies "
+            "(such as comparing AI to training a child or a robot). You may use these analogies to make it simple, "
+            "but do not introduce outside factual details, statistics, or metrics not in the context. "
+            "All core facts must remain strictly grounded in the context provided."
+        )
+    else:
+        critical_rule = (
+            "CRITICAL RULE: Answer using ONLY the direct facts explicitly stated in the CONTEXT above. "
+            "Do NOT introduce general facts, external descriptions, or general knowledge not present in the CONTEXT. "
+            "If the CONTEXT does not contain a specific fact or detail, omit it completely. "
+            "Keep your explanation strictly limited to the facts provided."
+        )
+        
     system_content = (
         f"{system_prompt}\n"
         f"--- CONTEXT ---\n"
         f"{context_str}\n"
         f"--- END OF CONTEXT ---\n"
-        f"CRITICAL RULE: Answer using ONLY the direct facts explicitly stated in the CONTEXT above. "
-        f"Do NOT paraphrase to introduce general facts, external descriptions, or general knowledge. "
-        f"If the CONTEXT does not contain a specific fact or detail, omit it completely. "
-        f"Keep your explanation strictly limited to the text provided."
+        f"{critical_rule}"
     )
     
     messages = [SystemMessage(content=system_content)]
@@ -373,10 +387,23 @@ def run_chat(request: ChatRequest) -> ChatResponse:
     messages.append(HumanMessage(content=normalized_q))
     
     try:
-        response = get_llm_model().invoke(messages)
+        temp = get_mode_temperature(request.mode)
+        response = get_llm_model(temperature=temp).invoke(messages)
         answer = response.content
     except Exception as e:
-        answer = f"Error communicating with DocMind AI: {str(e)}"
+        if GEMINI_API_KEY and OPENROUTER_API_KEY:
+            try:
+                fallback_llm = OpenRouterChat(
+                    model=LLM_MODEL,
+                    api_key=OPENROUTER_API_KEY,
+                    temperature=temp
+                )
+                response = fallback_llm.invoke(messages)
+                answer = response.content
+            except Exception as e_fallback:
+                answer = f"Error communicating with DocMind AI: {str(e_fallback)}"
+        else:
+            answer = f"Error communicating with DocMind AI: {str(e)}"
         
     # Extract cited source indices and clean up answer
     import re
@@ -522,8 +549,18 @@ def run_chat_stream(request: ChatRequest, user_id: str):
         return
 
     else:
+        # Determine dynamic top_k based on mode
+        if request.mode == "qa":
+            mode_top_k = 3
+        elif request.mode == "summary":
+            mode_top_k = 5
+        elif request.mode == "deep":
+            mode_top_k = 9  # 8 to 10 chunks
+        else:
+            mode_top_k = 5  # default/eli5
+
         # Search vector DB with BM25 hybrid ranking re-scoring
-        search_results = search_index(normalized_q, request.doc_ids, top_k=TOP_K)
+        search_results = search_index(normalized_q, request.doc_ids, top_k=mode_top_k)
         
         prefix_note = ""
         if cls_type == "TYPO" and normalized_q.strip().lower() != request.question.strip().lower():
@@ -597,15 +634,28 @@ def run_chat_stream(request: ChatRequest, user_id: str):
         confidence_label = "High" if confidence >= 80 else ("Medium" if confidence >= 65 else "Low")
         
         system_prompt = SYSTEM_PROMPTS.get(request.mode, SYSTEM_PROMPTS["qa"])
+        
+        if request.mode == "eli5":
+            critical_rule = (
+                "CRITICAL RULE: Explain the facts from the CONTEXT above using very simple child-friendly analogies "
+                "(such as comparing AI to training a child or a robot). You may use these analogies to make it simple, "
+                "but do not introduce outside factual details, statistics, or metrics not in the context. "
+                "All core facts must remain strictly grounded in the context provided."
+            )
+        else:
+            critical_rule = (
+                "CRITICAL RULE: Answer using ONLY the direct facts explicitly stated in the CONTEXT above. "
+                "Do NOT introduce general facts, external descriptions, or general knowledge not present in the CONTEXT. "
+                "If the CONTEXT does not contain a specific fact or detail, omit it completely. "
+                "Keep your explanation strictly limited to the facts provided."
+            )
+            
         system_content = (
             f"{system_prompt}\n"
             f"--- CONTEXT ---\n"
             f"{context_str}\n"
             f"--- END OF CONTEXT ---\n"
-            f"CRITICAL RULE: Answer using ONLY the direct facts explicitly stated in the CONTEXT above. "
-            f"Do NOT paraphrase to introduce general facts, external descriptions, or general knowledge. "
-            f"If the CONTEXT does not contain a specific fact or detail, omit it completely. "
-            f"Keep your explanation strictly limited to the text provided."
+            f"{critical_rule}"
         )
         messages_list = [SystemMessage(content=system_content)]
         if request.history:
@@ -629,52 +679,122 @@ def run_chat_stream(request: ChatRequest, user_id: str):
         full_answer += prefix_note
 
     # REST stream
-    formatted_messages = []
-    for msg in messages_list:
-        role = "user"
-        if msg.type == "assistant" or msg.type == "ai":
-            role = "assistant"
-        elif msg.type == "system":
-            role = "system"
-        formatted_messages.append({"role": role, "content": msg.content})
-
-    headers = {
-        "Authorization": f"Bearer {OPENROUTER_API_KEY}",
-        "Content-Type": "application/json"
-    }
-    payload = {
-        "model": LLM_MODEL,
-        "messages": formatted_messages,
-        "temperature": 0.2,
-        "stream": True
-    }
-
-    url = "https://openrouter.ai/api/v1/chat/completions"
     stream_answer = ""
-    
-    try:
-        response = requests.post(url, headers=headers, json=payload, stream=True)
-        response.raise_for_status()
+    if GEMINI_API_KEY:
+        try:
+            from langchain_google_genai import ChatGoogleGenerativeAI
+            temp = get_mode_temperature(request.mode)
+            llm = ChatGoogleGenerativeAI(
+                model="gemini-2.5-flash",
+                google_api_key=GEMINI_API_KEY,
+                temperature=temp,
+                max_retries=0,
+                convert_system_message_to_human=True
+            )
+            for chunk in llm.stream(messages_list):
+                delta = chunk.content
+                if delta:
+                    stream_answer += delta
+                    yield f"data: {json.dumps({'type': 'token', 'text': delta})}\n\n"
+        except Exception as e:
+            if OPENROUTER_API_KEY:
+                try:
+                    yield f"data: {json.dumps({'type': 'token', 'text': '*(Gemini API quota exceeded. Falling back to OpenRouter...)*\n\n'})}\n\n"
+                    formatted_messages = []
+                    for msg in messages_list:
+                        role = "user"
+                        if msg.type == "assistant" or msg.type == "ai":
+                            role = "assistant"
+                        elif msg.type == "system":
+                            role = "system"
+                        formatted_messages.append({"role": role, "content": msg.content})
+
+                    headers = {
+                        "Authorization": f"Bearer {OPENROUTER_API_KEY}",
+                        "Content-Type": "application/json"
+                    }
+                    temp = get_mode_temperature(request.mode)
+                    payload = {
+                        "model": LLM_MODEL,
+                        "messages": formatted_messages,
+                        "temperature": temp,
+                        "stream": True
+                    }
+
+                    url = "https://openrouter.ai/api/v1/chat/completions"
+                    response = requests.post(url, headers=headers, json=payload, stream=True)
+                    response.raise_for_status()
+                    
+                    for line in response.iter_lines():
+                        if line:
+                            line_str = line.decode("utf-8").strip()
+                            if line_str.startswith("data: "):
+                                data_content = line_str[6:]
+                                if data_content == "[DONE]":
+                                    break
+                                try:
+                                    chunk_json = json.loads(data_content)
+                                    delta = chunk_json["choices"][0]["delta"].get("content", "")
+                                    if delta:
+                                        stream_answer += delta
+                                        yield f"data: {json.dumps({'type': 'token', 'text': delta})}\n\n"
+                                except Exception:
+                                    pass
+                except Exception as e_fallback:
+                    err_msg = f"Error communicating with DocMind AI: {str(e_fallback)}"
+                    yield f"data: {json.dumps({'type': 'token', 'text': err_msg})}\n\n"
+                    stream_answer += err_msg
+            else:
+                err_msg = f"Error communicating with Gemini: {str(e)}"
+                yield f"data: {json.dumps({'type': 'token', 'text': err_msg})}\n\n"
+                stream_answer += err_msg
+    else:
+        formatted_messages = []
+        for msg in messages_list:
+            role = "user"
+            if msg.type == "assistant" or msg.type == "ai":
+                role = "assistant"
+            elif msg.type == "system":
+                role = "system"
+            formatted_messages.append({"role": role, "content": msg.content})
+
+        headers = {
+            "Authorization": f"Bearer {OPENROUTER_API_KEY}",
+            "Content-Type": "application/json"
+        }
+        temp = get_mode_temperature(request.mode)
+        payload = {
+            "model": LLM_MODEL,
+            "messages": formatted_messages,
+            "temperature": temp,
+            "stream": True
+        }
+
+        url = "https://openrouter.ai/api/v1/chat/completions"
         
-        for line in response.iter_lines():
-            if line:
-                line_str = line.decode("utf-8").strip()
-                if line_str.startswith("data: "):
-                    data_content = line_str[6:]
-                    if data_content == "[DONE]":
-                        break
-                    try:
-                        chunk_json = json.loads(data_content)
-                        delta = chunk_json["choices"][0]["delta"].get("content", "")
-                        if delta:
-                            stream_answer += delta
-                            yield f"data: {json.dumps({'type': 'token', 'text': delta})}\n\n"
-                    except Exception:
-                        pass
-    except Exception as e:
-        err_msg = f"Error communicating with DocMind AI: {str(e)}"
-        yield f"data: {json.dumps({'type': 'token', 'text': err_msg})}\n\n"
-        stream_answer += err_msg
+        try:
+            response = requests.post(url, headers=headers, json=payload, stream=True)
+            response.raise_for_status()
+            
+            for line in response.iter_lines():
+                if line:
+                    line_str = line.decode("utf-8").strip()
+                    if line_str.startswith("data: "):
+                        data_content = line_str[6:]
+                        if data_content == "[DONE]":
+                            break
+                        try:
+                            chunk_json = json.loads(data_content)
+                            delta = chunk_json["choices"][0]["delta"].get("content", "")
+                            if delta:
+                                stream_answer += delta
+                                yield f"data: {json.dumps({'type': 'token', 'text': delta})}\n\n"
+                        except Exception:
+                            pass
+        except Exception as e:
+            err_msg = f"Error communicating with DocMind AI: {str(e)}"
+            yield f"data: {json.dumps({'type': 'token', 'text': err_msg})}\n\n"
+            stream_answer += err_msg
 
     full_answer += stream_answer
 

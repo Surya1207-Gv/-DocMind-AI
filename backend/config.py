@@ -10,6 +10,7 @@ FAISS_DIR = os.path.join(BASE_DIR, "faiss_indices")
 load_dotenv(os.path.join(BASE_DIR, ".env"))
 
 OPENROUTER_API_KEY = os.getenv("OPENROUTER_API_KEY")
+GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
 
 # Create directories if they don't exist
 os.makedirs(UPLOAD_DIR, exist_ok=True)
@@ -22,4 +23,4 @@ LLM_MODEL = "nvidia/nemotron-3-nano-30b-a3b:free"
 # RAG Settings
 CHUNK_SIZE = 400
 CHUNK_OVERLAP = 50
-TOP_K = 4
+TOP_K = 8

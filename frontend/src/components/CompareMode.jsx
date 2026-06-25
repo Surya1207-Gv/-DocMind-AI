@@ -1,6 +1,54 @@
 import React, { useState } from "react";
 import { chatApi } from "../api";
-import ReactMarkdown from "react-markdown";
+
+function renderMarkdown(text) {
+  if (!text) return null;
+  const lines = text.split("\n");
+  const elements = [];
+  let currentList = [];
+
+  const parseInline = (str) => {
+    if (!str) return "";
+    const parts = str.split("**");
+    return parts.map((part, idx) => {
+      if (idx % 2 === 1) {
+        return <strong key={idx}>{part}</strong>;
+      }
+      return part;
+    });
+  };
+
+  const flushList = (key) => {
+    if (currentList.length > 0) {
+      elements.push(<ul key={`list-${key}`} style={{ paddingLeft: "20px", marginBottom: "12px", listStyleType: "disc" }}>{currentList}</ul>);
+      currentList = [];
+    }
+  };
+
+  lines.forEach((line, index) => {
+    const trimmed = line.trim();
+    if (trimmed.startsWith("- ") || trimmed.startsWith("* ")) {
+      const content = trimmed.substring(2);
+      currentList.push(<li key={index} style={{ marginBottom: "4px" }}>{parseInline(content)}</li>);
+    } else {
+      flushList(index);
+      if (line === "") {
+        elements.push(<div key={index} style={{ height: "8px" }} />);
+      } else if (trimmed.startsWith("### ")) {
+        elements.push(<h3 key={index} style={{ margin: "12px 0 6px 0", color: "var(--text-primary)", fontSize: "15px", fontWeight: "700" }}>{parseInline(trimmed.substring(4))}</h3>);
+      } else if (trimmed.startsWith("## ")) {
+        elements.push(<h2 key={index} style={{ margin: "16px 0 8px 0", color: "var(--text-primary)", fontSize: "17px", fontWeight: "700" }}>{parseInline(trimmed.substring(3))}</h2>);
+      } else if (trimmed.startsWith("# ")) {
+        elements.push(<h1 key={index} style={{ margin: "20px 0 10px 0", color: "var(--text-primary)", fontSize: "20px", fontWeight: "800" }}>{parseInline(trimmed.substring(2))}</h1>);
+      } else {
+        elements.push(<p key={index} style={{ marginBottom: "8px", lineHeight: "1.5" }}>{parseInline(line)}</p>);
+      }
+    }
+  });
+
+  flushList(lines.length);
+  return elements;
+}
 
 export default function CompareMode({ documents }) {
   const [selectedIds, setSelectedIds] = useState([]);
@@ -99,7 +147,7 @@ export default function CompareMode({ documents }) {
       {comparison && (
         <div style={{ display: "flex", flexDirection: "column", gap: "16px", marginTop: "16px" }}>
           <div className="compare-answer-card markdown-body">
-            <ReactMarkdown>{comparison.comparison_answer}</ReactMarkdown>
+            {renderMarkdown(comparison.comparison_answer)}
           </div>
 
           <h4 className="analytics-section-title">Individual Summaries</h4>
