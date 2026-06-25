@@ -3,6 +3,7 @@ import MessageBubble from "./MessageBubble";
 import TypingIndicator from "./TypingIndicator";
 import ChatModeSelector from "./ChatModeSelector";
 import ExportButton from "./ExportButton";
+import ProfileSection from "./ProfileSection";
 
 export default function ChatWindow({
   messages,
@@ -12,6 +13,14 @@ export default function ChatWindow({
   onSendMessage,
   loading,
   onClearHistory,
+  showInsights,
+  onToggleInsights,
+  username,
+  fullName,
+  email,
+  onLogout,
+  onEditProfile,
+  onCloseChat,
 }) {
   const [input, setInput] = useState("");
   const messagesEndRef = useRef(null);
@@ -39,9 +48,41 @@ export default function ChatWindow({
     <div className="chat-container">
       <header className="chat-header">
         <div className="header-doc-info">
-          <span className="header-title">
-            {activeDoc ? activeDoc.name : "Global Chat Mode"}
-          </span>
+          <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+            <span className="header-title">
+              {activeDoc ? activeDoc.name : "Global Chat Mode"}
+            </span>
+            {activeDoc && (
+              <button
+                onClick={onCloseChat}
+                style={{
+                  background: "transparent",
+                  border: "none",
+                  color: "var(--text-muted)",
+                  cursor: "pointer",
+                  fontSize: "12px",
+                  padding: "4px",
+                  lineHeight: 1,
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  borderRadius: "50%",
+                  transition: "background 0.2s, color 0.2s",
+                }}
+                onMouseEnter={(e) => {
+                  e.currentTarget.style.background = "rgba(239, 68, 68, 0.15)";
+                  e.currentTarget.style.color = "var(--color-error)";
+                }}
+                onMouseLeave={(e) => {
+                  e.currentTarget.style.background = "transparent";
+                  e.currentTarget.style.color = "var(--text-muted)";
+                }}
+                title="Close chat and go back"
+              >
+                ❌
+              </button>
+            )}
+          </div>
           <span className="header-subtitle">
             {activeDoc
               ? "Querying selected document"
@@ -66,9 +107,38 @@ export default function ChatWindow({
                 docName={activeDoc.name}
                 disabled={messages.length === 0}
               />
+              <button
+                className={`btn-action-outline ${showInsights ? "active" : ""}`}
+                style={{ fontSize: "11px", padding: "6px 10px", margin: 0, display: "flex", alignItems: "center", gap: "6px" }}
+                onClick={onToggleInsights}
+                title="Toggle Insights Panel"
+              >
+                {showInsights ? "👁️ Hide Panel" : "📊 Show Panel"}
+              </button>
+              <button
+                className="btn-action-outline"
+                style={{ fontSize: "11px", padding: "6px 10px", margin: 0, display: "flex", alignItems: "center", gap: "6px" }}
+                onClick={onCloseChat}
+                title="Close this chat session"
+              >
+                ❌ Close Chat
+              </button>
             </>
           )}
           <ChatModeSelector activeMode={activeMode} onChangeMode={onChangeMode} />
+
+          {/* User Profile & Logout - Only shown when insights panel is collapsed */}
+          {!showInsights && username && (
+            <div style={{ borderLeft: "1px solid var(--border-color)", paddingLeft: "12px", marginLeft: "8px" }}>
+              <ProfileSection
+                username={username}
+                fullName={fullName}
+                email={email}
+                onLogout={onLogout}
+                onEditProfile={onEditProfile}
+              />
+            </div>
+          )}
         </div>
       </header>
 

@@ -21,6 +21,7 @@ class SourceChunk(BaseModel):
 class ChatResponse(BaseModel):
     answer: str
     confidence: int
+    confidence_label: str = "Medium"
     sources: List[SourceChunk]
     mode: str
 

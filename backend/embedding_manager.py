@@ -43,16 +43,15 @@ def get_embeddings_model():
 def create_and_save_index(chunks: List[Dict[str, Any]], doc_id: str) -> str:
     """
     Creates a FAISS index from document chunks and saves it locally.
-    Uses batching and sleep intervals to respect Google Free Tier 429 rate limits.
+    Uses batching to send multiple texts per API request.
     """
     if not chunks:
         return ""
     
     embeddings = get_embeddings_model()
     
-    # Google AI Studio Free Tier has a rate limit of 100 requests per minute for embeddings.
-    # We will process them in batches of 40 to minimize API requests and ensure reliability.
-    BATCH_SIZE = 40
+    # Process up to 500 chunks in a single API call to minimize requests and maximize concurrency
+    BATCH_SIZE = 500
     
     # Initialize FAISS with first batch
     first_batch = chunks[:BATCH_SIZE]
@@ -61,9 +60,8 @@ def create_and_save_index(chunks: List[Dict[str, Any]], doc_id: str) -> str:
     
     vector_store = FAISS.from_texts(texts=first_texts, embedding=embeddings, metadatas=first_metadatas)
     
-    # Add subsequent batches with a short cooldown sleep
+    # Add subsequent batches
     for i in range(BATCH_SIZE, len(chunks), BATCH_SIZE):
-        time.sleep(1.5) # 1.5s sleep = max 40 requests/min, well under the 100 RPM limit
         batch = chunks[i:i + BATCH_SIZE]
         batch_texts = [c["text"] for c in batch]
         batch_metadatas = [c["metadata"] for c in batch]

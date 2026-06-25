@@ -125,6 +125,32 @@ def get_user_by_id(user_id: str) -> Optional[Dict[str, Any]]:
         row = conn.execute("SELECT * FROM users WHERE id = ?;", (user_id,)).fetchone()
         return dict(row) if row else None
 
+def update_user(user_id: str, username: str, email: str = None, full_name: str = None, password_hash: str = None) -> bool:
+    try:
+        with get_db_connection() as conn:
+            if password_hash:
+                conn.execute(
+                    "UPDATE users SET username = ?, email = ?, full_name = ?, password_hash = ? WHERE id = ?;",
+                    (username, email, full_name, password_hash, user_id)
+                )
+            else:
+                conn.execute(
+                    "UPDATE users SET username = ?, email = ?, full_name = ? WHERE id = ?;",
+                    (username, email, full_name, user_id)
+                )
+            conn.commit()
+            return True
+    except sqlite3.IntegrityError:
+        return False
+
+def get_active_chats(user_id: str) -> List[str]:
+    with get_db_connection() as conn:
+        rows = conn.execute(
+            "SELECT DISTINCT doc_id FROM chat_messages WHERE user_id = ?;",
+            (user_id,)
+        ).fetchall()
+        return [row["doc_id"] for row in rows]
+
 # --- Document Operations ---
 
 def add_document(doc_id: str, user_id: str, name: str, size: int, upload_time: str):
@@ -230,6 +256,8 @@ def get_chat_history(user_id: str, doc_id: str) -> List[Dict[str, Any]]:
         for r in rows:
             msg = dict(r)
             msg["sources"] = json.loads(msg["sources"])
+            conf = msg.get("confidence", 0)
+            msg["confidence_label"] = "High" if conf >= 80 else ("Medium" if conf >= 65 else "Low")
             history.append(msg)
         return history
 

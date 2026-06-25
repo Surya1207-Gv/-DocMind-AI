@@ -20,7 +20,7 @@ export default function MessageBubble({ message }) {
 
         {/* If AI Response has sources and confidence, display them */}
         {!isUser && message.confidence !== undefined && message.confidence > 0 && (
-          <ConfidenceMeter confidence={message.confidence} />
+          <ConfidenceMeter confidence={message.confidence} confidenceLabel={message.confidence_label} />
         )}
 
         {!isUser && message.sources && message.sources.length > 0 && (

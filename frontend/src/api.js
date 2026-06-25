@@ -49,6 +49,15 @@ export const authApi = {
     });
     return response.data;
   },
+  updateProfile: async (username, email, fullName, password = "") => {
+    const response = await api.put("/users/me", {
+      username,
+      email,
+      full_name: fullName,
+      password,
+    });
+    return response.data;
+  },
 };
 
 export const documentApi = {
@@ -109,6 +118,10 @@ export const chatApi = {
   },
   clearHistory: async (docId) => {
     const response = await api.delete(`/chat/history/${docId}`);
+    return response.data;
+  },
+  getActiveChats: async () => {
+    const response = await api.get("/chats/active");
     return response.data;
   },
 };

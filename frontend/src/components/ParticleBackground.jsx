@@ -37,7 +37,7 @@ export default function ParticleBackground() {
       draw() {
         ctx.beginPath();
         ctx.arc(this.x, this.y, this.radius, 0, Math.PI * 2);
-        ctx.fillStyle = `rgba(20, 184, 166, ${this.alpha})`; // Teal theme tint
+        ctx.fillStyle = `rgba(59, 130, 246, ${this.alpha})`; // Elegant blue tint
         ctx.fill();
       }
     }
@@ -71,7 +71,7 @@ export default function ParticleBackground() {
             ctx.moveTo(p1.x, p1.y);
             ctx.lineTo(p2.x, p2.y);
             const alpha = (1 - dist / 120) * 0.08;
-            ctx.strokeStyle = `rgba(16, 185, 129, ${alpha})`; // Emerald connect line
+            ctx.strokeStyle = `rgba(79, 70, 229, ${alpha})`; // Elegant indigo connect line
             ctx.lineWidth = 0.5;
             ctx.stroke();
           }

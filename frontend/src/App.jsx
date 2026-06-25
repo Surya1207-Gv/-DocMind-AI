@@ -5,7 +5,9 @@ import AnalyticsDash from "./components/AnalyticsDash";
 import QuizPanel from "./components/QuizPanel";
 import CompareMode from "./components/CompareMode";
 import ParticleBackground from "./components/ParticleBackground";
+import LandingPage from "./components/LandingPage";
 import { documentApi, chatApi, authApi } from "./api";
+import ProfileSection from "./components/ProfileSection";
 import "./App.css"; // Auth-specific styling overrides
 
 export default function App() {
@@ -27,6 +29,140 @@ export default function App() {
   const [chats, setChats] = useState({}); // { [docId]: [messages] }
   const [chatLoading, setChatLoading] = useState(false);
   const [toasts, setToasts] = useState([]);
+
+  // View state: "landing" | "auth" | "app"
+  const [view, setView] = useState(token ? "app" : "landing");
+
+  // Document intelligence insights panel toggle (spacious chat window style)
+  const [showInsights, setShowInsights] = useState(true);
+
+  // Layout resizing states
+  const [sidebarWidth, setSidebarWidth] = useState(280);
+  const [insightsWidth, setInsightsWidth] = useState(380);
+  
+  // Document IDs with active chats
+  const [activeChats, setActiveChats] = useState([]);
+
+  // Profile Edit modal states
+  const [isProfileModalOpen, setIsProfileModalOpen] = useState(false);
+  const [editUsername, setEditUsername] = useState("");
+  const [editFullName, setEditFullName] = useState("");
+  const [editEmail, setEditEmail] = useState("");
+  const [editPassword, setEditPassword] = useState("");
+  const [editError, setEditError] = useState("");
+  const [editLoading, setEditLoading] = useState(false);
+
+  // Ref to track active resizing
+  const resizeState = React.useRef({ isResizingSidebar: false, isResizingInsights: false });
+
+  const handleSidebarResizeStart = (e) => {
+    e.preventDefault();
+    resizeState.current.isResizingSidebar = true;
+    document.addEventListener("mousemove", handleMouseMove);
+    document.addEventListener("mouseup", handleMouseUp);
+  };
+
+  const handleInsightsResizeStart = (e) => {
+    e.preventDefault();
+    resizeState.current.isResizingInsights = true;
+    document.addEventListener("mousemove", handleMouseMove);
+    document.addEventListener("mouseup", handleMouseUp);
+  };
+
+  const handleMouseMove = (e) => {
+    if (resizeState.current.isResizingSidebar) {
+      const newWidth = Math.max(220, Math.min(450, e.clientX));
+      setSidebarWidth(newWidth);
+    } else if (resizeState.current.isResizingInsights) {
+      const newWidth = Math.max(280, Math.min(600, window.innerWidth - e.clientX));
+      setInsightsWidth(newWidth);
+    }
+  };
+
+  const handleMouseUp = () => {
+    resizeState.current.isResizingSidebar = false;
+    resizeState.current.isResizingInsights = false;
+    document.removeEventListener("mousemove", handleMouseMove);
+    document.removeEventListener("mouseup", handleMouseUp);
+  };
+
+  // Profile update handler
+  const handleUpdateProfile = async (e) => {
+    e.preventDefault();
+    if (!editUsername.trim() || !editEmail.trim() || !editFullName.trim()) {
+      setEditError("Please fill out all required fields.");
+      return;
+    }
+    if (editUsername.trim().length < 3) {
+      setEditError("Username must be at least 3 characters.");
+      return;
+    }
+    if (editFullName.trim().length < 2) {
+      setEditError("Full name must be at least 2 characters.");
+      return;
+    }
+    if (editPassword && editPassword.length < 4) {
+      setEditError("Password must be at least 4 characters.");
+      return;
+    }
+    const lowerEmail = editEmail.toLowerCase();
+    if (!lowerEmail.endsWith("@gmail.com") && !lowerEmail.endsWith("@google.com") && !lowerEmail.endsWith("@googlemail.com")) {
+      setEditError("Profile requires a Google email account (@gmail.com or @google.com).");
+      return;
+    }
+
+    setEditError("");
+    setEditLoading(true);
+
+    try {
+      const data = await authApi.updateProfile(
+        editUsername.trim(),
+        editEmail.trim(),
+        editFullName.trim(),
+        editPassword
+      );
+
+      localStorage.setItem("username", data.username);
+      localStorage.setItem("email", data.email || "");
+      localStorage.setItem("fullName", data.full_name || "");
+      setUsername(data.username);
+      setEmail(data.email || "");
+      setFullName(data.full_name || "");
+
+      addToast("Profile settings updated successfully!", "success");
+      setIsProfileModalOpen(false);
+      setEditPassword("");
+    } catch (err) {
+      const msg = err.response?.data?.detail || "Failed to update profile settings.";
+      setEditError(msg);
+    } finally {
+      setEditLoading(false);
+    }
+  };
+
+  const handleOpenEditProfile = () => {
+    setEditUsername(username || "");
+    setEditFullName(fullName || "");
+    setEditEmail(email || "");
+    setEditPassword("");
+    setEditError("");
+    setIsProfileModalOpen(true);
+  };
+
+  // Adjust body overflow depending on whether the main dashboard or the landing/auth pages are active
+  useEffect(() => {
+    if (token && view === "app") {
+      document.body.style.overflow = "hidden";
+      document.body.style.height = "100vh";
+    } else {
+      document.body.style.overflow = "auto";
+      document.body.style.height = "auto";
+    }
+    return () => {
+      document.body.style.overflow = "";
+      document.body.style.height = "";
+    };
+  }, [token, view]);
 
   // Auth Form State (Switch between Login and Signup)
   const [isLoginView, setIsLoginView] = useState(true);
@@ -58,10 +194,21 @@ export default function App() {
       setActiveDocId(null);
       setAnalytics(null);
       setChats({});
+      setView("landing");
     };
     window.addEventListener("auth-logout", handleForceLogout);
     return () => window.removeEventListener("auth-logout", handleForceLogout);
   }, []);
+
+  const loadActiveChats = async () => {
+    if (!token) return;
+    try {
+      const activeIds = await chatApi.getActiveChats();
+      setActiveChats(activeIds);
+    } catch (err) {
+      console.error("Failed to load active chats:", err);
+    }
+  };
 
   // Fetch documents on load (if token exists)
   const loadDocuments = async () => {
@@ -69,10 +216,7 @@ export default function App() {
     try {
       const list = await documentApi.list();
       setDocuments(list);
-      // Auto-select first doc if list is not empty and none is selected
-      if (list.length > 0 && !activeDocId) {
-        setActiveDocId(list[0].id);
-      }
+      loadActiveChats();
     } catch (err) {
       if (err.response?.status !== 401) {
         addToast("Backend server offline. Start uvicorn to connect.", "error");
@@ -91,18 +235,32 @@ export default function App() {
       return;
     }
     
+    let isMounted = true;
+    let pollTimer = null;
+    
     const loadAnalytics = async () => {
       try {
         const data = await documentApi.getAnalytics(activeDocId);
+        if (!isMounted) return;
         setAnalytics(data);
+        
+        // Check if analytics are still in placeholder (processing) state
+        const isPlaceholder = data && data.summary && data.summary.some(
+          s => s.includes("Analyzing document content") || s.includes("Please wait a moment")
+        );
+        
+        if (isPlaceholder) {
+          pollTimer = setTimeout(loadAnalytics, 2500); // Poll every 2.5 seconds
+        }
       } catch (err) {
-        setAnalytics(null);
+        if (isMounted) setAnalytics(null);
       }
     };
 
     const loadChatHistory = async () => {
       try {
         const history = await chatApi.getHistory(activeDocId);
+        if (!isMounted) return;
         setChats((prev) => ({
           ...prev,
           [activeDocId]: history,
@@ -114,6 +272,11 @@ export default function App() {
 
     loadAnalytics();
     loadChatHistory();
+
+    return () => {
+      isMounted = false;
+      if (pollTimer) clearTimeout(pollTimer);
+    };
   }, [activeDocId, token]);
 
   // Auth Action Handlers
@@ -156,6 +319,11 @@ export default function App() {
         setAuthError("Invalid email format.");
         return;
       }
+      const lowerEmail = authEmail.toLowerCase();
+      if (!lowerEmail.endsWith("@gmail.com") && !lowerEmail.endsWith("@google.com") && !lowerEmail.endsWith("@googlemail.com")) {
+        setAuthError("Registration requires a Google email account (@gmail.com or @google.com).");
+        return;
+      }
     }
 
     setAuthError("");
@@ -179,6 +347,7 @@ export default function App() {
       setUsername(data.username);
       setEmail(data.email || "");
       setFullName(data.full_name || "");
+      setView("app");
       
       // Reset auth forms
       setAuthUsername("");
@@ -207,6 +376,8 @@ export default function App() {
     setActiveDocId(null);
     setAnalytics(null);
     setChats({});
+    setActiveChats([]);
+    setView("landing");
     addToast("Logged out successfully.", "info");
   };
 
@@ -221,6 +392,7 @@ export default function App() {
     setActiveDocId(data.document.id);
     setAnalytics(data.analytics);
     setActiveTab("analytics"); // Open dashboard automatically
+    loadActiveChats();
   };
 
   const handleUploadError = (message) => {
@@ -244,8 +416,27 @@ export default function App() {
         setActiveDocId(null);
         setAnalytics(null);
       }
+      loadActiveChats();
     } catch (err) {
       addToast("Failed to delete document.", "error");
+    }
+  };
+
+  const handleDeleteChat = async (docId) => {
+    try {
+      await chatApi.clearHistory(docId);
+      setChats((prev) => ({
+        ...prev,
+        [docId]: [],
+      }));
+      addToast("Chat history deleted.", "success");
+      if (activeDocId === docId) {
+        setActiveDocId(null);
+        setAnalytics(null);
+      }
+      loadActiveChats();
+    } catch (err) {
+      addToast("Failed to delete chat history.", "error");
     }
   };
 
@@ -259,6 +450,7 @@ export default function App() {
         [activeDocId]: [],
       }));
       addToast("Chat history cleared.", "success");
+      loadActiveChats();
     } catch (err) {
       addToast("Failed to clear history.", "error");
     }
@@ -359,6 +551,7 @@ export default function App() {
                   historyCopy[idx] = {
                     ...historyCopy[idx],
                     confidence: parsed.confidence,
+                    confidence_label: parsed.confidence_label,
                     sources: parsed.sources,
                     content: parsed.content !== undefined ? parsed.content : historyCopy[idx].content,
                   };
@@ -386,8 +579,16 @@ export default function App() {
       addToast("Failed to generate response. Check backend connection.", "error");
     } finally {
       setChatLoading(false);
+      loadActiveChats();
     }
   };
+
+  useEffect(() => {
+    return () => {
+      document.removeEventListener("mousemove", handleMouseMove);
+      document.removeEventListener("mouseup", handleMouseUp);
+    };
+  }, []);
 
   // Auto-fill chat question from suggested question buttons
   const handleAskSuggestedQuestion = (qText) => {
@@ -396,6 +597,16 @@ export default function App() {
 
   const activeDoc = documents.find((d) => d.id === activeDocId);
   const currentMessages = activeDocId ? chats[activeDocId] || [] : [];
+
+  // Landing Page
+  if (!token && view === "landing") {
+    return (
+      <LandingPage
+        onLogin={() => { setIsLoginView(true); setView("auth"); }}
+        onSignup={() => { setIsLoginView(false); setView("auth"); }}
+      />
+    );
+  }
 
   // Authenticated Screen Rendering Guard
   if (!token) {
@@ -433,7 +644,7 @@ export default function App() {
                   <input
                     type="email"
                     className="login-input"
-                    placeholder="e.g. john@example.com"
+                    placeholder="e.g. john@gmail.com"
                     value={authEmail}
                     onChange={(e) => setAuthEmail(e.target.value)}
                     disabled={authLoading}
@@ -505,13 +716,29 @@ export default function App() {
               {isLoginView ? "Create an account" : "Sign In instead"}
             </button>
           </div>
+
+          <div className="login-toggle-text" style={{ marginTop: "4px" }}>
+            <button
+              type="button"
+              className="login-toggle-link"
+              style={{ color: "#475569", textDecoration: "none", fontSize: "12px" }}
+              onClick={() => setView("landing")}
+            >
+              ← Back to Home
+            </button>
+          </div>
         </div>
       </div>
     );
   }
 
   return (
-    <div className="app-container">
+    <div
+      className={`app-container ${showInsights ? "insights-open" : "insights-closed"}`}
+      style={{
+        gridTemplateColumns: `${sidebarWidth}px 6px 1fr ${showInsights ? `6px ${insightsWidth}px` : ""}`
+      }}
+    >
       <ParticleBackground />
 
       <Sidebar
@@ -519,13 +746,24 @@ export default function App() {
         activeDocId={activeDocId}
         setActiveDocId={setActiveDocId}
         onDeleteDoc={handleDeleteDoc}
+        onDeleteChat={handleDeleteChat}
         onUploadStart={handleUploadStart}
         onUploadSuccess={handleUploadSuccess}
         onUploadError={handleUploadError}
-        username={username}
-        fullName={fullName}
-        email={email}
-        onLogout={handleLogout}
+        activeChats={activeChats}
+      />
+
+      <div
+        className="layout-divider sidebar-divider"
+        onMouseDown={handleSidebarResizeStart}
+        style={{
+          width: "6px",
+          cursor: "col-resize",
+          height: "100%",
+          zIndex: 100,
+          background: "transparent",
+          transition: "background 0.2s",
+        }}
       />
 
       <ChatWindow
@@ -536,54 +774,239 @@ export default function App() {
         onSendMessage={handleSendMessage}
         loading={chatLoading}
         onClearHistory={handleClearHistory}
+        showInsights={showInsights}
+        onToggleInsights={() => setShowInsights(!showInsights)}
+        username={username}
+        fullName={fullName}
+        email={email}
+        onLogout={handleLogout}
+        onEditProfile={handleOpenEditProfile}
+        onCloseChat={() => setActiveDocId(null)}
       />
 
-      <section className="context-panel">
-        <header className="panel-header">
-          <span className="panel-title">Document Intelligence</span>
-        </header>
+      {showInsights && (
+        <div
+          className="layout-divider insights-divider"
+          onMouseDown={handleInsightsResizeStart}
+          style={{
+            width: "6px",
+            cursor: "col-resize",
+            height: "100%",
+            zIndex: 100,
+            background: "transparent",
+            transition: "background 0.2s",
+          }}
+        />
+      )}
 
-        <div className="panel-tabs">
-          <button
-            className={`panel-tab ${activeTab === "analytics" ? "active" : ""}`}
-            onClick={() => setActiveTab("analytics")}
-          >
-            Dashboard
-          </button>
-          <button
-            className={`panel-tab ${activeTab === "quiz" ? "active" : ""}`}
-            onClick={() => setActiveTab("quiz")}
-          >
-            Assessments
-          </button>
-          <button
-            className={`panel-tab ${activeTab === "compare" ? "active" : ""}`}
-            onClick={() => setActiveTab("compare")}
-          >
-            Cross-Compare
-          </button>
+      {showInsights && (
+        <section className="context-panel">
+          <header className="panel-header">
+            <span className="panel-title">Document Intelligence</span>
+            {username && (
+              <ProfileSection
+                username={username}
+                fullName={fullName}
+                email={email}
+                onLogout={handleLogout}
+                onEditProfile={handleOpenEditProfile}
+              />
+            )}
+          </header>
+
+          <div className="panel-tabs">
+            <button
+              className={`panel-tab ${activeTab === "analytics" ? "active" : ""}`}
+              onClick={() => setActiveTab("analytics")}
+            >
+              Dashboard
+            </button>
+            <button
+              className={`panel-tab ${activeTab === "quiz" ? "active" : ""}`}
+              onClick={() => setActiveTab("quiz")}
+            >
+              Assessments
+            </button>
+            <button
+              className={`panel-tab ${activeTab === "compare" ? "active" : ""}`}
+              onClick={() => setActiveTab("compare")}
+            >
+              Cross-Compare
+            </button>
+          </div>
+
+          <div className="panel-content">
+            {activeTab === "analytics" && (
+              <AnalyticsDash
+                analytics={analytics}
+                onAskQuestion={handleAskSuggestedQuestion}
+              />
+            )}
+
+            {activeTab === "quiz" && (
+              <QuizPanel
+                docId={activeDocId}
+                docName={activeDoc ? activeDoc.name : ""}
+              />
+            )}
+
+            {activeTab === "compare" && (
+              <CompareMode documents={documents} />
+            )}
+          </div>
+        </section>
+      )}
+
+      {/* Edit Profile Modal */}
+      {isProfileModalOpen && (
+        <div className="modal-overlay" style={{
+          position: "fixed",
+          top: 0,
+          left: 0,
+          width: "100vw",
+          height: "100vh",
+          background: "rgba(0, 0, 0, 0.65)",
+          backdropFilter: "blur(4px)",
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+          zIndex: 1000,
+        }}>
+          <div className="modal-card" style={{
+            background: "rgba(22, 23, 30, 0.95)",
+            backdropFilter: "blur(16px)",
+            border: "1px solid var(--border-color)",
+            borderRadius: "var(--radius-lg)",
+            padding: "32px",
+            width: "100%",
+            maxWidth: "400px",
+            display: "flex",
+            flexDirection: "column",
+            gap: "20px",
+            boxShadow: "var(--glass-shadow)"
+          }}>
+            <h3 style={{ margin: 0, fontSize: "20px", fontWeight: "800", color: "var(--text-primary)" }}>Edit Profile Settings</h3>
+            <form onSubmit={handleUpdateProfile} style={{ display: "flex", flexDirection: "column", gap: "16px" }}>
+              <div style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
+                <label style={{ fontSize: "11px", fontWeight: "700", color: "var(--text-muted)", textTransform: "uppercase" }}>Full Name</label>
+                <input
+                  type="text"
+                  style={{
+                    padding: "10px 12px",
+                    background: "rgba(255, 255, 255, 0.03)",
+                    border: "1px solid var(--border-color)",
+                    borderRadius: "8px",
+                    color: "var(--text-primary)",
+                    outline: "none"
+                  }}
+                  value={editFullName}
+                  onChange={(e) => setEditFullName(e.target.value)}
+                  disabled={editLoading}
+                  required
+                />
+              </div>
+
+              <div style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
+                <label style={{ fontSize: "11px", fontWeight: "700", color: "var(--text-muted)", textTransform: "uppercase" }}>Email Address</label>
+                <input
+                  type="email"
+                  style={{
+                    padding: "10px 12px",
+                    background: "rgba(255, 255, 255, 0.03)",
+                    border: "1px solid var(--border-color)",
+                    borderRadius: "8px",
+                    color: "var(--text-primary)",
+                    outline: "none"
+                  }}
+                  value={editEmail}
+                  onChange={(e) => setEditEmail(e.target.value)}
+                  disabled={editLoading}
+                  required
+                />
+              </div>
+
+              <div style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
+                <label style={{ fontSize: "11px", fontWeight: "700", color: "var(--text-muted)", textTransform: "uppercase" }}>Username</label>
+                <input
+                  type="text"
+                  style={{
+                    padding: "10px 12px",
+                    background: "rgba(255, 255, 255, 0.03)",
+                    border: "1px solid var(--border-color)",
+                    borderRadius: "8px",
+                    color: "var(--text-primary)",
+                    outline: "none"
+                  }}
+                  value={editUsername}
+                  onChange={(e) => setEditUsername(e.target.value)}
+                  disabled={editLoading}
+                  required
+                />
+              </div>
+
+              <div style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
+                <label style={{ fontSize: "11px", fontWeight: "700", color: "var(--text-muted)", textTransform: "uppercase" }}>New Password (optional)</label>
+                <input
+                  type="password"
+                  style={{
+                    padding: "10px 12px",
+                    background: "rgba(255, 255, 255, 0.03)",
+                    border: "1px solid var(--border-color)",
+                    borderRadius: "8px",
+                    color: "var(--text-primary)",
+                    outline: "none"
+                  }}
+                  placeholder="Leave blank to keep current"
+                  value={editPassword}
+                  onChange={(e) => setEditPassword(e.target.value)}
+                  disabled={editLoading}
+                />
+              </div>
+
+              {editError && (
+                <div style={{ color: "var(--color-error)", fontSize: "12px", background: "rgba(239, 68, 68, 0.1)", padding: "10px", borderRadius: "6px", textAlign: "center" }}>
+                  ⚠️ {editError}
+                </div>
+              )}
+
+              <div style={{ display: "flex", gap: "12px", marginTop: "10px", justifyContent: "flex-end" }}>
+                <button
+                  type="button"
+                  onClick={() => setIsProfileModalOpen(false)}
+                  style={{
+                    background: "transparent",
+                    border: "1px solid var(--border-color)",
+                    color: "var(--text-secondary)",
+                    padding: "10px 20px",
+                    borderRadius: "8px",
+                    cursor: "pointer",
+                    fontSize: "13px"
+                  }}
+                  disabled={editLoading}
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  style={{
+                    background: "var(--gradient-accent)",
+                    border: "none",
+                    color: "white",
+                    padding: "10px 20px",
+                    borderRadius: "8px",
+                    cursor: "pointer",
+                    fontSize: "13px",
+                    fontWeight: "600"
+                  }}
+                  disabled={editLoading}
+                >
+                  {editLoading ? "Saving..." : "Save Changes"}
+                </button>
+              </div>
+            </form>
+          </div>
         </div>
-
-        <div className="panel-content">
-          {activeTab === "analytics" && (
-            <AnalyticsDash
-              analytics={analytics}
-              onAskQuestion={handleAskSuggestedQuestion}
-            />
-          )}
-
-          {activeTab === "quiz" && (
-            <QuizPanel
-              docId={activeDocId}
-              docName={activeDoc ? activeDoc.name : ""}
-            />
-          )}
-
-          {activeTab === "compare" && (
-            <CompareMode documents={documents} />
-          )}
-        </div>
-      </section>
+      )}
 
       {/* Toast Notifications */}
       <div className="toast-container">

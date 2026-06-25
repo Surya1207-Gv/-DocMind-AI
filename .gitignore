@@ -21,6 +21,8 @@ backend/faiss_indices/
 # Document Uploads
 backend/uploads/
 backend/metadata.json
+backend/metadata_migrated.json
+backend/docmind.db
 
 # Logs
 *.log

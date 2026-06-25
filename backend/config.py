@@ -20,6 +20,6 @@ EMBEDDING_MODEL = "openai/text-embedding-3-small"
 LLM_MODEL = "nvidia/nemotron-3-nano-30b-a3b:free"
 
 # RAG Settings
-CHUNK_SIZE = 2000
-CHUNK_OVERLAP = 300
+CHUNK_SIZE = 400
+CHUNK_OVERLAP = 50
 TOP_K = 4

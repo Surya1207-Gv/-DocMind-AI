@@ -3,7 +3,7 @@ import json
 import shutil
 import uuid
 from datetime import datetime
-from typing import List, Dict, Any
+from typing import List, Dict, Any, Optional
 from fastapi import FastAPI, UploadFile, File, HTTPException, BackgroundTasks, Depends, status
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
@@ -51,8 +51,8 @@ class TokenResponse(BaseModel):
     access_token: str
     token_type: str
     username: str
-    email: str = None
-    full_name: str = None
+    email: Optional[str] = None
+    full_name: Optional[str] = None
 
 # --- Database Migration helper on Startup ---
 def migrate_metadata_json():
@@ -140,6 +140,9 @@ def register_user(request: UserRegisterRequest):
         raise HTTPException(status_code=400, detail="Full name must be >= 2 characters.")
     if "@" not in email or "." not in email:
         raise HTTPException(status_code=400, detail="Invalid email address structure.")
+    lower_email = email.lower()
+    if not (lower_email.endswith("@gmail.com") or lower_email.endswith("@google.com") or lower_email.endswith("@googlemail.com")):
+        raise HTTPException(status_code=400, detail="Registration requires a Google email account (@gmail.com or @google.com).")
         
     # Check if username exists
     existing_uname = db.get_user_by_username(username)
@@ -186,10 +189,93 @@ def login_user(request: UserAuthRequest):
         full_name=user["full_name"]
     )
 
+class UserUpdateRequest(BaseModel):
+    username: str
+    email: str
+    full_name: str
+    password: str = ""
+
+@app.put("/api/users/me")
+def update_current_user(request: UserUpdateRequest, current_user: dict = Depends(get_current_user)):
+    username = request.username.strip()
+    email = request.email.strip()
+    full_name = request.full_name.strip()
+    password = request.password.strip()
+
+    if len(username) < 3:
+        raise HTTPException(status_code=400, detail="Username must be >= 3 characters.")
+    if len(full_name) < 2:
+        raise HTTPException(status_code=400, detail="Full name must be >= 2 characters.")
+    if "@" not in email or "." not in email:
+        raise HTTPException(status_code=400, detail="Invalid email address structure.")
+    
+    lower_email = email.lower()
+    if not (lower_email.endswith("@gmail.com") or lower_email.endswith("@google.com") or lower_email.endswith("@googlemail.com")):
+        raise HTTPException(status_code=400, detail="Profile requires a Google email account (@gmail.com or @google.com).")
+    
+    # Check if username exists on another user
+    existing_uname = db.get_user_by_username(username)
+    if existing_uname and existing_uname["id"] != current_user["id"]:
+        raise HTTPException(status_code=400, detail="Username is already taken.")
+        
+    # Check if email exists on another user
+    with db.get_db_connection() as conn:
+        existing_email = conn.execute("SELECT id FROM users WHERE email = ? AND id != ?;", (email, current_user["id"])).fetchone()
+        if existing_email:
+            raise HTTPException(status_code=400, detail="Email is already in use by another user.")
+            
+    pwd_hash = None
+    if password:
+        if len(password) < 4:
+            raise HTTPException(status_code=400, detail="Password must be >= 4 characters.")
+        pwd_hash = hash_password(password)
+
+    success = db.update_user(
+        user_id=current_user["id"],
+        username=username,
+        email=email,
+        full_name=full_name,
+        password_hash=pwd_hash
+    )
+    if not success:
+        raise HTTPException(status_code=400, detail="Failed to update user profile.")
+        
+    return {
+        "username": username,
+        "email": email,
+        "full_name": full_name
+    }
+
+@app.get("/api/chats/active")
+def get_active_chats_list(current_user: dict = Depends(get_current_user)):
+    return db.get_active_chats(current_user["id"])
+
 # --- Protected Document Inventory Routes ---
 
+def background_analyze_task(chunks: List[Dict[str, Any]], doc_id: str, filename: str, page_count: int):
+    try:
+        analytics = analyze_document(chunks, doc_id, filename, page_count)
+        db.save_analytics(
+            doc_id,
+            analytics.word_count,
+            analytics.page_count,
+            analytics.read_time_mins,
+            analytics.complexity_score,
+            analytics.summary,
+            [e.dict() for e in analytics.entities],
+            [a.dict() for a in analytics.alerts],
+            analytics.suggested_questions
+        )
+        print(f"[Background Task] Analytics generated and saved for doc_id: {doc_id}")
+    except Exception as e:
+        print(f"[Background Task] Error generating analytics for doc_id {doc_id}: {e}")
+
 @app.post("/api/upload")
-async def upload_document(file: UploadFile = File(...), current_user: dict = Depends(get_current_user)):
+async def upload_document(
+    background_tasks: BackgroundTasks,
+    file: UploadFile = File(...),
+    current_user: dict = Depends(get_current_user)
+):
     if not file.filename.endswith(".pdf"):
         raise HTTPException(status_code=400, detail="Only PDF files are supported.")
         
@@ -215,26 +301,40 @@ async def upload_document(file: UploadFile = File(...), current_user: dict = Dep
             
         page_count = max([c["metadata"].get("page", 1) for c in chunks])
         
-        # Create FAISS Vector Index
+        # Create FAISS Vector Index (using the optimized batching implementation)
         create_and_save_index(chunks, doc_id)
         
-        # Generate Document Intelligence Analytics report
-        analytics = analyze_document(chunks, doc_id, file.filename, page_count)
+        # Compute basic word stats for placeholder analytics
+        total_text = " ".join([c["text"] for c in chunks])
+        word_count = len(total_text.split())
+        read_time_mins = max(1, round(word_count / 200))
         
-        # Save to SQLite
+        # Save to SQLite doc inventory
         upload_time_str = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
         db.add_document(doc_id, current_user["id"], file.filename, file_size, upload_time_str)
+        
+        # Save placeholder analytics to SQLite first
+        placeholder_summary = [
+            "Analyzing document content to extract key summaries...",
+            "Please wait a moment while details are extracted."
+        ]
+        placeholder_alerts = [
+            {"type": "insight", "content": "Analyzing document content in the background...", "page": 1}
+        ]
         db.save_analytics(
-            doc_id,
-            analytics.word_count,
-            analytics.page_count,
-            analytics.read_time_mins,
-            analytics.complexity_score,
-            analytics.summary,
-            [e.dict() for e in analytics.entities],
-            [a.dict() for a in analytics.alerts],
-            analytics.suggested_questions
+            doc_id=doc_id,
+            word_count=word_count,
+            page_count=page_count,
+            read_time_mins=read_time_mins,
+            complexity_score="Medium",
+            summary=placeholder_summary,
+            entities=[],
+            alerts=placeholder_alerts,
+            suggested_questions=["What is the main topic of this document?"]
         )
+        
+        # Spawn background task to generate real analytics
+        background_tasks.add_task(background_analyze_task, chunks, doc_id, file.filename, page_count)
         
         doc_info = DocumentInfo(
             id=doc_id,
@@ -243,8 +343,22 @@ async def upload_document(file: UploadFile = File(...), current_user: dict = Dep
             upload_time=upload_time_str
         )
         
+        from backend.models import SmartAlert
+        analytics = DocumentAnalytics(
+            doc_id=doc_id,
+            doc_name=file.filename,
+            word_count=word_count,
+            page_count=page_count,
+            read_time_mins=read_time_mins,
+            complexity_score="Medium",
+            summary=placeholder_summary,
+            entities=[],
+            alerts=[SmartAlert(type="insight", content="Analyzing document content in the background...", page=1)],
+            suggested_questions=["What is the main topic of this document?"]
+        )
+        
         return {
-            "message": "File processed successfully",
+            "message": "File processed successfully. Analytics will populate in the background.",
             "document": doc_info,
             "analytics": analytics
         }
