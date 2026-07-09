@@ -701,7 +701,7 @@ def run_chat_stream(request: ChatRequest, user_id: str):
         except Exception as e:
             if OPENROUTER_API_KEY:
                 try:
-                    yield f"data: {json.dumps({'type': 'token', 'text': '*(Gemini API quota exceeded. Falling back to OpenRouter...)*\n\n'})}\n\n"
+                    yield "data: " + json.dumps({'type': 'token', 'text': "*(Gemini API quota exceeded. Falling back to OpenRouter...)*\n\n"}) + "\n\n"
                     formatted_messages = []
                     for msg in messages_list:
                         role = "user"
