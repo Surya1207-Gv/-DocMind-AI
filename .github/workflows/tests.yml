@@ -9,15 +9,13 @@ on:
 jobs:
   backend-tests:
     runs-on: ubuntu-latest
-    permissions:
-      contents: write
     steps:
     - uses: actions/checkout@v4
 
     - name: Set up Python
       uses: actions/setup-python@v5
       with:
-        python-version: '3.12'
+        python-version: '3.11'
         cache: 'pip'
 
     - name: Install dependencies
@@ -32,15 +30,7 @@ jobs:
         GEMINI_API_KEY: mock_gemini_key
         JWT_SECRET_KEY: mock_secret_key
       run: |
-        python -m pytest backend/tests/ -v --tb=short --cov=backend --cov-report=xml > test_log.txt 2>&1 || TEST_EXIT_CODE=$?
-        if [ -n "$TEST_EXIT_CODE" ] && [ "$TEST_EXIT_CODE" -ne 0 ]; then
-          git config --global user.name "CI Debugger"
-          git config --global user.email "ci-debug@docmind.ai"
-          git add test_log.txt
-          git commit -m "chore: upload GHA test failure logs [skip ci]"
-          git push
-          exit $TEST_EXIT_CODE
-        fi
+        python -m pytest backend/tests/ -v --tb=short --cov=backend --cov-report=xml
 
   frontend-tests:
     runs-on: ubuntu-latest
