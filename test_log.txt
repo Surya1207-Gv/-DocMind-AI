@@ -1,0 +1,42 @@
+ImportError while loading conftest '/home/runner/work/-DocMind-AI/-DocMind-AI/backend/tests/conftest.py'.
+backend/tests/conftest.py:43: in <module>
+    from backend.main import app
+backend/main.py:17: in <module>
+    from backend.pdf_processor import process_pdf
+backend/pdf_processor.py:5: in <module>
+    from langchain_text_splitters import RecursiveCharacterTextSplitter
+/opt/hostedtoolcache/Python/3.12.13/x64/lib/python3.12/site-packages/langchain_text_splitters/__init__.py:22: in <module>
+    from langchain_text_splitters.base import (
+/opt/hostedtoolcache/Python/3.12.13/x64/lib/python3.12/site-packages/langchain_text_splitters/base.py:23: in <module>
+    from langchain_core.documents import BaseDocumentTransformer, Document
+/opt/hostedtoolcache/Python/3.12.13/x64/lib/python3.12/site-packages/langchain_core/documents/__init__.py:6: in <module>
+    from langchain_core.documents.compressor import BaseDocumentCompressor
+/opt/hostedtoolcache/Python/3.12.13/x64/lib/python3.12/site-packages/langchain_core/documents/compressor.py:6: in <module>
+    from langchain_core.callbacks import Callbacks
+/opt/hostedtoolcache/Python/3.12.13/x64/lib/python3.12/site-packages/langchain_core/callbacks/__init__.py:22: in <module>
+    from langchain_core.callbacks.manager import (
+/opt/hostedtoolcache/Python/3.12.13/x64/lib/python3.12/site-packages/langchain_core/callbacks/manager.py:29: in <module>
+    from langsmith.run_helpers import get_run_tree_context
+/opt/hostedtoolcache/Python/3.12.13/x64/lib/python3.12/site-packages/langsmith/run_helpers.py:40: in <module>
+    from langsmith import client as ls_client
+/opt/hostedtoolcache/Python/3.12.13/x64/lib/python3.12/site-packages/langsmith/client.py:52: in <module>
+    from langsmith import env as ls_env
+/opt/hostedtoolcache/Python/3.12.13/x64/lib/python3.12/site-packages/langsmith/env/__init__.py:3: in <module>
+    from langsmith.env._runtime_env import (
+/opt/hostedtoolcache/Python/3.12.13/x64/lib/python3.12/site-packages/langsmith/env/_runtime_env.py:10: in <module>
+    from langsmith.utils import get_docker_compose_command
+/opt/hostedtoolcache/Python/3.12.13/x64/lib/python3.12/site-packages/langsmith/utils.py:31: in <module>
+    from langsmith import schemas as ls_schemas
+/opt/hostedtoolcache/Python/3.12.13/x64/lib/python3.12/site-packages/langsmith/schemas.py:69: in <module>
+    class Example(ExampleBase):
+/opt/hostedtoolcache/Python/3.12.13/x64/lib/python3.12/site-packages/pydantic/v1/main.py:286: in __new__
+    cls.__try_update_forward_refs__()
+/opt/hostedtoolcache/Python/3.12.13/x64/lib/python3.12/site-packages/pydantic/v1/main.py:807: in __try_update_forward_refs__
+    update_model_forward_refs(cls, cls.__fields__.values(), cls.__config__.json_encoders, localns, (NameError,))
+/opt/hostedtoolcache/Python/3.12.13/x64/lib/python3.12/site-packages/pydantic/v1/typing.py:554: in update_model_forward_refs
+    update_field_forward_refs(f, globalns=globalns, localns=localns)
+/opt/hostedtoolcache/Python/3.12.13/x64/lib/python3.12/site-packages/pydantic/v1/typing.py:520: in update_field_forward_refs
+    field.type_ = evaluate_forwardref(field.type_, globalns, localns or None)
+/opt/hostedtoolcache/Python/3.12.13/x64/lib/python3.12/site-packages/pydantic/v1/typing.py:66: in evaluate_forwardref
+    return cast(Any, type_)._evaluate(globalns, localns, set())
+E   TypeError: ForwardRef._evaluate() missing 1 required keyword-only argument: 'recursive_guard'
