@@ -1,0 +1,9 @@
+ImportError while loading conftest '/home/runner/work/-DocMind-AI/-DocMind-AI/backend/tests/conftest.py'.
+backend/tests/conftest.py:43: in <module>
+    from backend.main import app
+backend/main.py:19: in <module>
+    from backend.chat_engine import run_chat, run_chat_stream
+E     File "/home/runner/work/-DocMind-AI/-DocMind-AI/backend/chat_engine.py", line 704
+E       yield f"data: {json.dumps({'type': 'token', 'text': '*(Gemini API quota exceeded. Falling back to OpenRouter...)*\n\n'})}\n\n"
+E                                                                                                                                     ^
+E   SyntaxError: f-string expression part cannot include a backslash
