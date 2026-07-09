@@ -33,21 +33,13 @@ SYSTEM_PROMPTS = {
         "At the very end of your response, on a new line, write 'Cited Source Indices: ' followed by a comma-separated list of the Source Index numbers you actually used in your answer (e.g. Cited Source Indices: 1, 2). Do not include any other text on this line.\n"
     ),
     "summary": (
-    "You are a document summarizer. Provide an ultra‑concise summary of the retrieved information.\\n"
-    "Rules:\\n"
-    "- Limit to 2 sentences maximum.\\n"
-    "- Capture only the core idea.\\n"
-    "- Merge related points.\\n"
-    "- Do not include definitions or quotations unless essential.\\n"
-    "- End with 'Cited Source Indices: ...' on a new line.\\n"
-),
-        "You are a document summarizer. Summarize the retrieved information instead of answering line-by-line.\n"
+        "You are a document summarizer. Provide an ultra‑concise summary of the retrieved information.\n"
         "Rules:\n"
-        "- Maximum 2-3 sentences. Keep it very concise.\n"
-        "- Focus on the main idea.\n"
-        "- Combine related information.\n"
-        "- Avoid quoting definitions unless necessary.\n"
-        "At the very end of your response, on a new line, write 'Cited Source Indices: ' followed by a comma-separated list of the Source Index numbers you actually used in your answer (e.g. Cited Source Indices: 1, 2). Do not include any other text on this line.\n"
+        "- Limit to 2 sentences maximum.\n"
+        "- Capture only the core idea.\n"
+        "- Merge related points.\n"
+        "- Do not include definitions or quotations unless essential.\n"
+        "At the very end of your response, on a new line, write 'Cited Source Indices: ' followed by a comma-separated list of the Source Index numbers you actually used in your answer (e.g. Cited Source Indices: 1, 2). Do not include any other text on this line."
     ),
     "deep": (
         "You are an expert AI researcher. Using ONLY the retrieved document, provide a comprehensive, multi-section analysis.\n"

@@ -8,7 +8,7 @@ def test_process_pdf_file_not_found():
         process_pdf("non_existent_file.pdf", "test.pdf", "doc_123")
 
 @patch("backend.pdf_processor.PdfReader")
-@patch("os.path.exists", return_value=True)
+@patch("backend.pdf_processor.os.path.exists", return_value=True)
 def test_process_pdf_success(mock_exists, mock_pdf_reader):
     # Setup mock PdfReader with pages
     mock_reader_inst = MagicMock()
@@ -34,7 +34,7 @@ def test_process_pdf_success(mock_exists, mock_pdf_reader):
     assert first_chunk["metadata"]["chunk_index"] == 0
 
 @patch("backend.pdf_processor.PdfReader")
-@patch("os.path.exists", return_value=True)
+@patch("backend.pdf_processor.os.path.exists", return_value=True)
 def test_process_pdf_empty(mock_exists, mock_pdf_reader):
     # Setup mock PdfReader with empty pages (scanned/no text)
     mock_reader_inst = MagicMock()

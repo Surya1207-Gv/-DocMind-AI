@@ -19,6 +19,15 @@ TEST_DB_FILE = os.path.join(TEST_DIR, "docmind_test.db")
 os.makedirs(TEST_UPLOAD_DIR, exist_ok=True)
 os.makedirs(TEST_FAISS_DIR, exist_ok=True)
 
+# Redirect all sqlite3 connections for docmind.db to TEST_DB_FILE
+import sqlite3
+_original_connect = sqlite3.connect
+def mock_connect(database, *args, **kwargs):
+    if isinstance(database, str) and (database.endswith("docmind.db") or "docmind.db" in database):
+        return _original_connect(TEST_DB_FILE, *args, **kwargs)
+    return _original_connect(database, *args, **kwargs)
+sqlite3.connect = mock_connect
+
 # Patch config and DB file before importing backend components
 import backend.config
 backend.config.UPLOAD_DIR = TEST_UPLOAD_DIR
