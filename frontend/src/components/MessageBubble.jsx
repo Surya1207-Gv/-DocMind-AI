@@ -57,7 +57,7 @@ export default function MessageBubble({ message }) {
 
   return (
     <div className={`message-wrapper ${message.role}`}>
-      <div className="avatar">{isUser ? "U" : "AI"}</div>
+      <div className="avatar">{isUser ? "U" : "J"}</div>
       <div className="message-content-container">
         <div className="message-bubble markdown-body">
           {isUser ? (

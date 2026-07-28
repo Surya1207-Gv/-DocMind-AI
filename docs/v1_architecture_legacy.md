@@ -1,8 +1,25 @@
-# DocMind AI — Complete Project Deep Dive
+> ⚠️ **SUPERSEDED — V1 Architecture (Pre-Auth, Pre-Hybrid-Retrieval)**
+>
+> This document describes the original v1 design of DocMind AI before the major architectural upgrade.
+> It is kept intentionally to document the system's evolution.
+> **For the current architecture, see [README.md](../README.md).**
+>
+> **What changed between v1 and current:**
+> - **Authentication:** None in v1 → JWT + bcrypt multi-tenant isolation in current
+> - **Retrieval:** Pure FAISS vector search (TOP_K=4) in v1 → Hybrid BM25 + FAISS with custom boosting in current
+> - **Chat transport:** Plain JSON response in v1 → SSE streaming with citation pruning in current
+> - **Persistence:** `metadata.json` flat file in v1 → SQLite (users, history, analytics, quiz cache) in current
+> - **LLM model:** `liquid/lfm-2.5-1.2b-instruct:free` in v1 → `nvidia/nemotron-3-nano-30b-a3b:free` in current
+> - **Endpoints:** 8 in v1 → 15 in current (added auth, user profile, active chats, chat clear)
+
+---
+
+# DocMind AI — V1 Architecture Deep Dive
 
 > **A full-stack AI-powered Document Intelligence Platform using Retrieval-Augmented Generation (RAG)**
 
 ---
+
 
 ## 📌 What Is This Project?
 

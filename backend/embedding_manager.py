@@ -1,6 +1,7 @@
 import os
 import shutil
 import re
+import time
 from typing import List, Dict, Any, Tuple
 from langchain_community.vectorstores import FAISS
 import requests
@@ -24,10 +25,21 @@ class OpenRouterEmbeddings(Embeddings):
             "model": self.model,
             "input": texts
         }
-        response = requests.post(self.url, headers=headers, json=payload)
-        response.raise_for_status()
-        data = response.json()
-        return [item["embedding"] for item in data["data"]]
+        # Retry with exponential backoff for transient API failures
+        for attempt in range(3):
+            try:
+                response = requests.post(self.url, headers=headers, json=payload, timeout=30)
+                response.raise_for_status()
+                data = response.json()
+                return [item["embedding"] for item in data["data"]]
+            except requests.exceptions.Timeout:
+                if attempt == 2:
+                    raise RuntimeError("Embedding API timed out after 3 attempts")
+                time.sleep(2 ** attempt)  # 1s, 2s backoff
+            except requests.exceptions.RequestException as e:
+                if attempt == 2:
+                    raise
+                time.sleep(2 ** attempt)
         
     def embed_query(self, text: str) -> List[float]:
         return self.embed_documents([text])[0]
@@ -81,8 +93,13 @@ def delete_index(doc_id: str):
         shutil.rmtree(doc_index_path)
 
 import math
-
 import string
+
+# Module-level BM25 cache to avoid rebuilding on every query
+# Key: hash of corpus content tuples → Value: SimpleBM25 instance
+_bm25_cache: Dict[int, "SimpleBM25"] = {}
+
+BM25_CACHE_MAX_SIZE = 50  # Evict oldest when cache grows too large
 
 class SimpleBM25:
     def __init__(self, corpus: List[str]):
@@ -225,9 +242,16 @@ def search_index(query: str, doc_ids: List[str], top_k: int = 4) -> List[Tuple[A
     if not candidates:
         return []
         
-    # Re-ranking using BM25
+    # Re-ranking using BM25 (use cached index if corpus already seen)
     corpus = [doc.page_content for doc, _ in candidates]
-    bm25 = SimpleBM25(corpus)
+    corpus_hash = hash(tuple(corpus))
+    if corpus_hash not in _bm25_cache:
+        if len(_bm25_cache) >= BM25_CACHE_MAX_SIZE:
+            # Evict the oldest entry (first key in dict)
+            oldest = next(iter(_bm25_cache))
+            del _bm25_cache[oldest]
+        _bm25_cache[corpus_hash] = SimpleBM25(corpus)
+    bm25 = _bm25_cache[corpus_hash]
     
     # Compute BM25 scores
     bm25_scores = [bm25.get_score(query, i) for i in range(len(candidates))]

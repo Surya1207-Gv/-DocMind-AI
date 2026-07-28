@@ -8,7 +8,15 @@ from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from backend.database import get_user_by_id
 
 # JWT configuration
-SECRET_KEY = os.getenv("JWT_SECRET_KEY", "docmind_super_secret_signing_key_change_me_in_prod")
+SECRET_KEY = os.getenv("JWT_SECRET_KEY")
+if not SECRET_KEY:
+    import warnings
+    warnings.warn(
+        "JWT_SECRET_KEY is not set in environment variables. "
+        "Using a temporary insecure key. Set JWT_SECRET_KEY in backend/.env for production.",
+        stacklevel=1
+    )
+    SECRET_KEY = "docmind_dev_key_CHANGE_IN_PRODUCTION_DO_NOT_USE_IN_PROD"
 ALGORITHM = "HS256"
 ACCESS_TOKEN_EXPIRE_MINUTES = 1440  # 24 hours
 

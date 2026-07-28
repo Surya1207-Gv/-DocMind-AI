@@ -1,4 +1,4 @@
-﻿# DocMind AI — Production-Grade RAG Document Intelligence Platform
+# DocMind AI — Production-Grade RAG Document Intelligence Platform
 
 ## Overview
 
@@ -36,7 +36,7 @@ Most "Chat with PDF" projects are simple wrappers: embed → store → retrieve 
 
 - **Architected an autonomous agentic workflow** that performs entity extraction, executive summarization, complexity analysis, proactive alert generation, and suggested-question creation on every document upload.
 
-- **Built a modular 6-engine AI backend** exposed through 8 REST APIs, incorporating Pydantic validation, fault-tolerant processing, rate-limit resilience, and scalable multi-document analysis.
+- **Built a modular 6-engine AI backend** exposed through 15 API endpoints, incorporating Pydantic validation, fault-tolerant processing, rate-limit resilience, and scalable multi-document analysis.
 
 - **Developed multi-document reasoning capabilities**, including cross-document comparison, structured MCQ generation, session-aware conversational memory, and a complete SaaS-ready React platform.
 
@@ -115,7 +115,7 @@ Custom Boost Layer:
 Relevance Threshold (drop if hybrid_score < 0.50)
     |
     v
-Top-4 chunks --> Context prompt assembly
+Top-K chunks (configurable, default 8) --> Context prompt assembly
     |
     v
 LLM Generation (Streaming SSE with grounding constraints)
@@ -133,9 +133,9 @@ Final SSE metadata event with clean response + cited sources only
 
 | Layer | Technology | Purpose |
 |---|---|---|
-| Frontend | React 18 + Vite | SPA with SSE streaming support |
+| Frontend | React 19 + Vite 8 | SPA with SSE streaming support |
 | Styling | Vanilla CSS | Glassmorphism dark UI, particle canvas |
-| Backend | FastAPI + Uvicorn | 8 REST APIs + SSE streaming |
+| Backend | FastAPI + Uvicorn | 15 API endpoints + SSE streaming |
 | Language | Python 3.12 | Backend runtime |
 | RAG Core | LangChain | Document chunking, vector store abstraction |
 | Embeddings | OpenRouter (text-embedding-3-small) | Semantic vector generation |
@@ -148,6 +148,7 @@ Final SSE metadata event with clean response + cited sources only
 | Database | SQLite | User data, chat history, analytics cache |
 | PDF Export | jsPDF | Client-side chat export |
 | HTTP Client | Axios | Frontend API layer |
+
 
 ---
 
@@ -227,8 +228,11 @@ cd frontend && npm run dev
 
 | Method | Endpoint | Auth Required | Description |
 |---|---|---|---|
+| GET | /api/health | No | Health check — returns status and version |
 | POST | /api/auth/register | No | Register a new user |
 | POST | /api/auth/login | No | Login and receive JWT |
+| PUT | /api/users/me | Yes | Update username, email, or password |
+| GET | /api/chats/active | Yes | Get last-active document for the session |
 | POST | /api/upload | Yes | Upload PDF, run full agentic pipeline |
 | GET | /api/documents | Yes | List user uploaded documents |
 | DELETE | /api/documents/{doc_id} | Yes | Delete document + FAISS index |
@@ -238,6 +242,7 @@ cd frontend && npm run dev
 | GET | /api/analytics/{doc_id} | Yes | Get document analytics |
 | POST | /api/quiz/{doc_id} | Yes | Generate / return cached MCQ quiz |
 | POST | /api/compare | Yes | Multi-document cross-comparison |
+
 
 ---
 
@@ -353,3 +358,9 @@ Licensed under the [MIT License](LICENSE).
 ---
 
 Built by Surya Sasank — A production-grade RAG system demonstrating semantic retrieval, hybrid reranking, agentic workflows, and grounded LLM generation.
+
+---
+
+## Architecture Evolution
+
+The v1 design (pure vector search, `metadata.json` storage, no auth, 8 endpoints) is preserved in [`docs/v1_architecture_legacy.md`](docs/v1_architecture_legacy.md) to document how the system evolved. The transition from v1 to v2 introduced JWT multi-tenancy, hybrid BM25+FAISS retrieval, SSE streaming, and SQLite persistence — each driven by concrete limitations hit in the simpler design.

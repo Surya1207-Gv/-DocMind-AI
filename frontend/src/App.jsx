@@ -112,8 +112,8 @@ export default function App() {
       return;
     }
     const lowerEmail = editEmail.toLowerCase();
-    if (!lowerEmail.endsWith("@gmail.com") && !lowerEmail.endsWith("@google.com") && !lowerEmail.endsWith("@googlemail.com")) {
-      setEditError("Profile requires a Google email account (@gmail.com or @google.com).");
+    if (!lowerEmail.includes("@") || !lowerEmail.includes(".")) {
+      setEditError("Invalid email format.");
       return;
     }
 
@@ -323,11 +323,6 @@ export default function App() {
       }
       if (!authEmail.includes("@") || !authEmail.includes(".")) {
         setAuthError("Invalid email format.");
-        return;
-      }
-      const lowerEmail = authEmail.toLowerCase();
-      if (!lowerEmail.endsWith("@gmail.com") && !lowerEmail.endsWith("@google.com") && !lowerEmail.endsWith("@googlemail.com")) {
-        setAuthError("Registration requires a Google email account (@gmail.com or @google.com).");
         return;
       }
     }

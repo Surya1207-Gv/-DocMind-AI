@@ -8,12 +8,17 @@ __pycache__/
 *$py.class
 venv/
 backend/venv/
+.pytest_cache/
+.coverage
+htmlcov/
 
 # Node files
 node_modules/
 dist/
 dist-ssr/
 *.local
+frontend/node_modules/
+frontend/dist/
 
 # FAISS Indices
 backend/faiss_indices/
@@ -22,10 +27,23 @@ backend/faiss_indices/
 backend/uploads/
 backend/metadata.json
 backend/metadata_migrated.json
-backend/docmind.db
 
-# Logs
+# SQLite (includes WAL mode sidecar files)
+backend/docmind.db
+backend/docmind.db-shm
+backend/docmind.db-wal
+
+# Logs and CI artifacts
 *.log
+test_log.txt
+coverage.xml
+*.xml
+.coverage
+
+# Scratch / one-off scripts (not production code)
+backend/scratch_*.py
+backend/find_free_models.py
+backend/test_reranking_proposed*.py
 
 # Editor configurations
 .vscode/

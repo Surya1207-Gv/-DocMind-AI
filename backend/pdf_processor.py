@@ -1,5 +1,4 @@
 import os
-import uuid
 from typing import List, Dict, Any
 from pypdf import PdfReader
 from langchain_text_splitters import RecursiveCharacterTextSplitter

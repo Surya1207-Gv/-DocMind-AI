@@ -21,6 +21,6 @@ EMBEDDING_MODEL = "openai/text-embedding-3-small"
 LLM_MODEL = "nvidia/nemotron-3-nano-30b-a3b:free"
 
 # RAG Settings
-CHUNK_SIZE = 400
-CHUNK_OVERLAP = 50
+CHUNK_SIZE = 1000   # ~150 words — enough for one coherent paragraph
+CHUNK_OVERLAP = 150  # 15% overlap — prevents boundary fragmentation
 TOP_K = 8

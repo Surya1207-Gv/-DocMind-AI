@@ -1,5 +1,8 @@
 import os
 import json
+import re
+import uuid
+from datetime import datetime
 from typing import List, Dict, Any, Tuple, Optional, Callable
 import requests
 from langchain_core.language_models.chat_models import BaseChatModel
@@ -228,10 +231,11 @@ def classify_and_normalize_question(question: str) -> Dict[str, Any]:
     }
 
 
-import json
-import uuid
-from datetime import datetime
 from backend.database import save_chat_message
+
+# Maximum number of conversation turns to send to the LLM
+# Older turns are dropped to prevent token overflow
+MAX_HISTORY_TURNS = 5  # 5 user + 5 assistant = 10 messages max
 
 def run_chat(request: ChatRequest) -> ChatResponse:
     # 1. Classify the question
@@ -469,9 +473,10 @@ def run_chat_stream(request: ChatRequest, user_id: str):
             "Let them know you are DocMind and are ready to help them analyze the uploaded documents once they select or ask about them."
         )
         messages_list = [SystemMessage(content=system_prompt)]
-        if request.history:
-            for msg in request.history:
-                messages_list.append(HumanMessage(content=msg.content) if msg.role == "user" else AIMessage(content=msg.content))
+        # Sliding window: only inject last MAX_HISTORY_TURNS*2 messages to prevent token overflow
+        recent_history = (request.history or [])[-(MAX_HISTORY_TURNS * 2):]
+        for msg in recent_history:
+            messages_list.append(HumanMessage(content=msg.content) if msg.role == "user" else AIMessage(content=msg.content))
         messages_list.append(HumanMessage(content=request.question))
         confidence = 0
         confidence_label = "High"
@@ -660,9 +665,10 @@ def run_chat_stream(request: ChatRequest, user_id: str):
             f"{critical_rule}"
         )
         messages_list = [SystemMessage(content=system_content)]
-        if request.history:
-            for msg in request.history:
-                messages_list.append(HumanMessage(content=msg.content) if msg.role == "user" else AIMessage(content=msg.content))
+        # Sliding window: only inject last MAX_HISTORY_TURNS*2 messages to prevent token overflow
+        recent_history = (request.history or [])[-(MAX_HISTORY_TURNS * 2):]
+        for msg in recent_history:
+            messages_list.append(HumanMessage(content=msg.content) if msg.role == "user" else AIMessage(content=msg.content))
         messages_list.append(HumanMessage(content=normalized_q))
 
     # stream metadata
@@ -775,7 +781,7 @@ def run_chat_stream(request: ChatRequest, user_id: str):
         url = "https://openrouter.ai/api/v1/chat/completions"
         
         try:
-            response = requests.post(url, headers=headers, json=payload, stream=True)
+            response = requests.post(url, headers=headers, json=payload, stream=True, timeout=60)
             response.raise_for_status()
             
             for line in response.iter_lines():
@@ -801,7 +807,6 @@ def run_chat_stream(request: ChatRequest, user_id: str):
     full_answer += stream_answer
 
     # Extract cited source indices and clean up full_answer
-    import re
     cited_indices = []
     match = re.search(r"Cited Source Indices:\s*([\d\s,]+)", stream_answer, re.IGNORECASE)
     if match:

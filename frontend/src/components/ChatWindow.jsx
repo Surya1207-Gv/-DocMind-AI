@@ -155,7 +155,7 @@ export default function ChatWindow({
 
         {loading && (messages.length === 0 || messages[messages.length - 1].role !== "assistant") && (
           <div className="message-wrapper assistant">
-            <div className="avatar">AI</div>
+            <div className="avatar">J</div>
             <div className="message-content-container">
               <div className="message-bubble" style={{ background: "var(--bg-surface)", border: "1px solid var(--border-color)" }}>
                 <TypingIndicator />
