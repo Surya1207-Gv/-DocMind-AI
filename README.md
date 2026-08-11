@@ -15,23 +15,9 @@ DocMind AI is an enterprise-grade Retrieval-Augmented Generation (RAG) platform 
 
 ---
 
-## What Makes This Different
-
-| Dimension | Standard Tutorial RAG | DocMind AI Platform |
-|---|---|---|
-| **Retrieval Strategy** | Pure vector distance (top-k) | **Hybrid BM25 + FAISS Vector** with subject proximity regex boosting |
-| **Tokenization** | Naive whitespace / lowercase split | **CamelCase-aware regex tokenizer** + 124 curated stop-words |
-| **Multi-Hop Reasoning** | Single-shot query (fails multi-topic) | **LangGraph StateGraph Agent** (Planner → Retriever → Synthesizer → Verifier) |
-| **Boundary Handling** | Truncated sentences at chunk edges | **Adjacent Chunk Expansion** (`chunk_index + 1` docstore lookups) |
-| **Streaming & Citations**| Naive raw streaming | **Three-phase SSE** with post-hoc citation pruning |
-| **Empirical Evaluation** | Unmeasured assertions | **45-Query Benchmark Harness** measuring Recall@K, Precision@K, and MRR |
-| **Observability** | Console `print()` statements | **Structured JSON Telemetry** + Zero-hit rate degradation alerts |
-| **Fault Tolerance** | Crashing on rate limit | **Gemini → OpenRouter Provider Failover** + 3-attempt exponential backoff |
-| **Testing** | 0 to 5 unit tests | **71 Automated Tests** (62 Backend Pytest + 9 Frontend Vitest + CI) |
-
----
-
 ## 📊 Empirical Retrieval Benchmark (1,200 Chunks, 60 Labeled Queries)
+
+> **Corpus Note:** To benchmark retrieval accuracy under repeatable, un-confounded conditions, retrieval performance is measured on a controlled 1,200-chunk evaluation corpus across 4 technical document archetypes (Dense RFC Specs, Academic Deep Learning Papers, Banking/Compliance Regulations, Cloud Infrastructure Guides) with 60 ground-truth labeled queries.
 
 Retrieval performance empirically evaluated across 4 document archetypes (**1,200 chunks**, top-4 retrieval inspects **0.33%** of the corpus) using a 60-query discriminating benchmark suite (`backend/evaluate_retrieval.py`):
 
@@ -47,6 +33,7 @@ Retrieval performance empirically evaluated across 4 document archetypes (**1,20
 - **BM25 Blind Spot (66.7% Recall@4 for Vector on BM25 queries):** Pure Vector degrades on rare RFC identifiers, parameter constants, and acronyms (`RFC 8446`, `PCI-DSS 4.0 Req 3.4`). BM25 scores 100%.
 - **Proximity Regex Boost (+0.45):** Lifts Definitional queries from 80.0% to **100.0% Recall@4** and improves nDCG@4 from 0.8149 to **0.8917**, dropping Mean Rank from 3.45 to **1.78**.
 - **Score Separation (+0.2315):** In full production, the relevant chunk scores **+0.2315 higher** than the top distractor chunk, ensuring dependable 0.50 threshold filtering.
+
 
 
 

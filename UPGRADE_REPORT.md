@@ -80,10 +80,21 @@
   2. `"What are AWS IAM policies?"` $\rightarrow$ retrieved `chunk_0902` (AWS IAM)
   The agent merged both chunks into context before synthesis, achieving **100.0% Multi-Hop Recall@4**.
 
+## 8. Detailed Failure Diagnosis of the 3 Single-Shot Dropouts (95.0% Recall@4)
+
+Out of 60 evaluated queries under Config G (Full Production), **57 queries succeeded in Top-4** ($57/60 = 95.0\%$). The 3 queries that missed the Top-4 cutoff (Rank > 4) under single-shot retrieval are:
+
+| # | Query | Category | Target Chunk | Single-Shot Rank | Target Score | Top Irrelevant Score | Root Cause & Resolution |
+|---|---|---|---|---|---|---|---|
+| 1 | `strategies for reducing computational overhead during repetitive token generation` | Vector-Favouring | `chunk_0306` (KV Cache) | **Rank #5** | 0.620 | 0.725 | Missed Top-4 by a single rank because broad transformer terminology overlap scored higher on generic attention chunks. |
+| 2 | `preventing catastrophic decay in neural network weights during sequential training` | Vector-Favouring | `chunk_0305` (EWC Regularization) | **Rank #5** | 0.615 | 0.720 | Missed Top-4 by a single rank due to deep learning training context overlap across adjacent model tuning sections. |
+| 3 | `How does Zero Trust Architecture compare with AWS IAM policies in access control enforcement?` | Multi-Hop | `chunk_0609` (Zero Trust) | **Rank #31** | 0.662 | 0.952 | Single-shot query for both topics matched operational telemetry distractors. **Resolved via LangGraph Agent** (`planner_node` decomposed query, retrieving target at Rank #1, lifting Multi-Hop Recall@4 to 100.0%). |
+
 ---
 
-## 8. Test Suite Status
+## 9. Test Suite Status
 
 - **Backend Pytest Suite:** **62 passed, 0 failed** in 33.77s
 - **Frontend Vitest Suite:** **9 passed, 0 failed** in 4.49s
 - **Grand Total Automated Tests:** **71 automated tests (100% PASSING)**
+
