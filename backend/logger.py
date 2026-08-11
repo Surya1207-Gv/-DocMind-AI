@@ -1,25 +1,25 @@
 """
-Centralized logging configuration for DocMind AI backend.
-
-Usage in any module:
-    from backend.logger import get_logger
-    logger = get_logger(__name__)
-    
-    logger.info("Document %s processed with %d chunks", doc_id, len(chunks))
-    logger.warning("No results above threshold for query: %s", query)
-    logger.error("OpenRouter API error: %s", str(e))
-    logger.debug("FAISS search returned %d candidates", len(candidates))
+=============================================================================
+DocMind AI — Centralized Structured Logging & RAG Telemetry
+=============================================================================
+Provides rotating file and console logging alongside structured RAG metrics:
+  - Query latency breakdown (vector_ms, bm25_ms, total_ms)
+  - Retrieval yield & threshold passage rate
+  - Zero-hit rate monitoring (leading indicator of retrieval degradation)
 """
 
 import logging
 import sys
 import os
+import time
+import hashlib
+import json
+from typing import Dict, Any, Optional
 from logging.handlers import RotatingFileHandler
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 LOG_FILE = os.path.join(BASE_DIR, "docmind.log")
 
-# Root log level — change to DEBUG for verbose output
 LOG_LEVEL = os.getenv("LOG_LEVEL", "INFO").upper()
 
 _fmt = logging.Formatter(
@@ -27,22 +27,56 @@ _fmt = logging.Formatter(
     datefmt="%Y-%m-%d %H:%M:%S"
 )
 
+# ---------------------------------------------------------------------------
+# In-Memory RAG Telemetry Tracker
+# ---------------------------------------------------------------------------
+class RAGTelemetry:
+    def __init__(self):
+        self.total_queries = 0
+        self.zero_hit_queries = 0
+        self.total_latency_ms = 0.0
+        self.boost_triggered_count = 0
+        self.events = []
+
+    def record_event(self, event_data: Dict[str, Any]):
+        self.total_queries += 1
+        if event_data.get("passed_threshold", 0) == 0:
+            self.zero_hit_queries += 1
+        if event_data.get("boost_applied"):
+            self.boost_triggered_count += 1
+        self.total_latency_ms += event_data.get("total_ms", 0.0)
+        
+        # Keep last 50 events in circular memory
+        self.events.append(event_data)
+        if len(self.events) > 50:
+            self.events.pop(0)
+
+    def get_summary(self) -> Dict[str, Any]:
+        avg_lat = (self.total_latency_ms / self.total_queries) if self.total_queries > 0 else 0.0
+        zero_hit_rate = (self.zero_hit_queries / self.total_queries * 100.0) if self.total_queries > 0 else 0.0
+        boost_rate = (self.boost_triggered_count / self.total_queries * 100.0) if self.total_queries > 0 else 0.0
+        return {
+            "total_queries": self.total_queries,
+            "zero_hit_queries": self.zero_hit_queries,
+            "zero_hit_rate_pct": round(zero_hit_rate, 2),
+            "avg_latency_ms": round(avg_lat, 2),
+            "boost_triggered_rate_pct": round(boost_rate, 2),
+            "recent_events_count": len(self.events)
+        }
+
+telemetry = RAGTelemetry()
+
 
 def get_logger(name: str) -> logging.Logger:
-    """
-    Returns a configured logger for the given module name.
-    
-    Each call with the same name returns the same logger instance.
-    Handlers are only added once to prevent duplicate log entries.
-    """
+    """Returns a configured logger for the given module name."""
     logger = logging.getLogger(name)
     
     if logger.handlers:
-        return logger  # Already configured — avoid adding duplicate handlers
+        return logger
     
     logger.setLevel(getattr(logging, LOG_LEVEL, logging.INFO))
     
-    # Console handler (stdout) — always active
+    # Console handler (stdout)
     console_handler = logging.StreamHandler(sys.stdout)
     console_handler.setFormatter(_fmt)
     logger.addHandler(console_handler)
@@ -55,10 +89,43 @@ def get_logger(name: str) -> logging.Logger:
         file_handler.setFormatter(_fmt)
         logger.addHandler(file_handler)
     except (OSError, PermissionError):
-        # File logging not critical — continue with console only
         pass
     
-    # Prevent log messages from propagating to the root logger (avoids duplicates)
     logger.propagate = False
-    
     return logger
+
+
+def log_rag_retrieval_event(
+    query: str,
+    candidates_count: int,
+    passed_threshold_count: int,
+    top_score: float,
+    vector_ms: float,
+    bm25_ms: float,
+    boost_applied: Optional[str] = None
+):
+    """
+    Logs structured telemetry for a RAG retrieval execution and records in telemetry tracker.
+    """
+    q_hash = hashlib.sha256(query.encode("utf-8")).hexdigest()[:8]
+    total_ms = round(vector_ms + bm25_ms, 2)
+    
+    event_data = {
+        "event": "rag_retrieval",
+        "query_hash": q_hash,
+        "candidates": candidates_count,
+        "passed_threshold": passed_threshold_count,
+        "top_score": round(top_score, 3),
+        "vector_ms": round(vector_ms, 2),
+        "bm25_ms": round(bm25_ms, 2),
+        "total_ms": total_ms,
+        "boost_applied": boost_applied or "none"
+    }
+    
+    telemetry.record_event(event_data)
+    
+    rag_logger = get_logger("docmind.rag_telemetry")
+    rag_logger.info("[TELEMETRY] %s", json.dumps(event_data))
+    
+    if passed_threshold_count == 0:
+        rag_logger.warning("[DEGRADATION ALERT] Query hash %s produced 0 chunks above 0.50 threshold!", q_hash)

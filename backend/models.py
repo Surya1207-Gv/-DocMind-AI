@@ -77,3 +77,17 @@ class DocumentInfo(BaseModel):
     name: str
     size: int
     upload_time: str
+
+class AgentQueryRequest(BaseModel):
+    question: str
+    doc_ids: List[str] = Field(default_factory=list)
+    mode: str = "deep"
+
+class AgentQueryResponse(BaseModel):
+    answer: str
+    sub_queries: List[str]
+    confidence: int
+    confidence_label: str
+    sources: List[Dict[str, Any]]
+    verification_status: Dict[str, Any]
+

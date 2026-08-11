@@ -108,3 +108,35 @@ def test_chat_history_lifecycle(client, auth_headers, mock_document):
     # Verify empty history
     history_resp = client.get(f"/api/chat/history/{mock_document}", headers=auth_headers)
     assert history_resp.json() == []
+
+@patch("backend.main.run_agent_query")
+def test_agent_query_endpoint(mock_run_agent, client, auth_headers, mock_document):
+    mock_run_agent.return_value = {
+        "answer": "Multi-hop answer synthesized.",
+        "sub_queries": ["sub1", "sub2"],
+        "confidence": 88,
+        "confidence_label": "High",
+        "sources": [],
+        "verification_status": {"grounded": True, "verifier_passed": True}
+    }
+    
+    payload = {
+        "doc_ids": [mock_document],
+        "question": "Compare refund and payment policies",
+        "mode": "deep"
+    }
+    resp = client.post("/api/agent/query", json=payload, headers=auth_headers)
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["answer"] == "Multi-hop answer synthesized."
+    assert len(data["sub_queries"]) == 2
+    assert data["confidence"] == 88
+
+def test_telemetry_endpoint(client, auth_headers):
+    resp = client.get("/api/telemetry", headers=auth_headers)
+    assert resp.status_code == 200
+    data = resp.json()
+    assert "total_queries" in data
+    assert "zero_hit_rate_pct" in data
+    assert "avg_latency_ms" in data
+

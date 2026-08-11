@@ -7,9 +7,10 @@ from langchain_community.vectorstores import FAISS
 import requests
 from langchain_core.embeddings import Embeddings
 from backend.config import OPENROUTER_API_KEY, EMBEDDING_MODEL, FAISS_DIR
-from backend.logger import get_logger
+from backend.logger import get_logger, log_rag_retrieval_event
 
 logger = get_logger(__name__)
+
 
 
 class OpenRouterEmbeddings(Embeddings):
@@ -238,13 +239,17 @@ def search_index(query: str, doc_ids: List[str], top_k: int = 4) -> List[Tuple[A
         return []
         
     # Retrieve a larger set of candidates for re-ranking (e.g., max of 3x top_k and 15)
+    t_vec_start = time.perf_counter()
     candidate_count = max(top_k * 3, 15)
     candidates = main_vector_store.similarity_search_with_score(query, k=candidate_count)
+    vector_ms = (time.perf_counter() - t_vec_start) * 1000.0
     
     if not candidates:
+        log_rag_retrieval_event(query, 0, 0, 0.0, vector_ms, 0.0, None)
         return []
         
     # Re-ranking using BM25 (use cached index if corpus already seen)
+    t_bm25_start = time.perf_counter()
     corpus = [doc.page_content for doc, _ in candidates]
     corpus_hash = hash(tuple(corpus))
     if corpus_hash not in _bm25_cache:
@@ -258,6 +263,8 @@ def search_index(query: str, doc_ids: List[str], top_k: int = 4) -> List[Tuple[A
     # Compute BM25 scores
     bm25_scores = [bm25.get_score(query, i) for i in range(len(candidates))]
     max_bm25 = max(bm25_scores) if bm25_scores else 0.0
+    bm25_ms = (time.perf_counter() - t_bm25_start) * 1000.0
+
     
     q_lower = query.lower().strip()
     is_definition_query = q_lower.startswith(("what is", "what are", "define", "meaning of", "explain what", "describe"))
@@ -378,5 +385,18 @@ def search_index(query: str, doc_ids: List[str], top_k: int = 4) -> List[Tuple[A
         simulated_distance = 2.0 * (1.0 - hybrid_score)
         final_results.append((expanded_doc, simulated_distance))
         
+    top_score = scored_candidates[0][2] if scored_candidates else 0.0
+    boost_type = "proximity" if is_definition_query else ("header" if any(len(w) > 3 for w in query_content_words) else None)
+    log_rag_retrieval_event(
+        query=query,
+        candidates_count=len(candidates),
+        passed_threshold_count=len(final_results),
+        top_score=top_score,
+        vector_ms=vector_ms,
+        bm25_ms=bm25_ms,
+        boost_applied=boost_type
+    )
+        
     return final_results
+
 

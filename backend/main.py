@@ -12,7 +12,8 @@ from pydantic import BaseModel
 from backend.config import UPLOAD_DIR, BASE_DIR
 from backend.models import (
     ChatRequest, ChatResponse, DocumentInfo, DocumentAnalytics, 
-    QuizResponse, CompareRequest, CompareResponse
+    QuizResponse, CompareRequest, CompareResponse,
+    AgentQueryRequest, AgentQueryResponse
 )
 from backend.pdf_processor import process_pdf
 from backend.embedding_manager import create_and_save_index, delete_index
@@ -20,13 +21,15 @@ from backend.chat_engine import run_chat_stream
 from backend.analytics_engine import analyze_document
 from backend.quiz_engine import generate_document_quiz
 from backend.compare_engine import compare_documents
+from backend.agent_engine import run_agent_query
 
 # Authenticated & Database layers
 from backend.auth import get_current_user, hash_password, verify_password, create_access_token
 import backend.database as db
-from backend.logger import get_logger
+from backend.logger import get_logger, telemetry
 
 logger = get_logger(__name__)
+
 
 app = FastAPI(title="DocMind - Backend API")
 
@@ -512,3 +515,40 @@ def compare_docs(request: CompareRequest, current_user: dict = Depends(get_curre
         return response
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error comparing documents: {str(e)}")
+
+# --- LangGraph Agent & Observability Routes ---
+
+@app.post("/api/agent/query", response_model=AgentQueryResponse)
+def agent_query_endpoint(request: AgentQueryRequest, current_user: dict = Depends(get_current_user)):
+    """
+    Executes multi-hop query decomposition, hybrid retrieval, synthesis, and
+    fact-verification using the LangGraph state graph.
+    """
+    logger.info("[API Agent Query] User: %s | Query: '%s' | Docs: %s", current_user.get('username'), request.question, request.doc_ids)
+    for doc_id in request.doc_ids:
+        doc = db.get_document(doc_id, current_user["id"])
+        if not doc:
+            raise HTTPException(status_code=404, detail=f"Document ID {doc_id} not found or unauthorized.")
+            
+    try:
+        result = run_agent_query(request.question, request.doc_ids, mode=request.mode)
+        return AgentQueryResponse(
+            answer=result["answer"],
+            sub_queries=result["sub_queries"],
+            confidence=result["confidence"],
+            confidence_label=result["confidence_label"],
+            sources=result["sources"],
+            verification_status=result["verification_status"]
+        )
+    except Exception as e:
+        logger.error("Error executing LangGraph agent query: %s", e)
+        raise HTTPException(status_code=500, detail=f"Error executing agent query: {str(e)}")
+
+@app.get("/api/telemetry")
+def get_telemetry_summary(current_user: dict = Depends(get_current_user)):
+    """
+    Returns real-time RAG operational metrics including zero-hit rates,
+    average query latencies, and threshold passage counts.
+    """
+    return telemetry.get_summary()
+

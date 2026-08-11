@@ -3,8 +3,9 @@ from backend.evaluate_retrieval import EvaluationEngine, BENCHMARK_CORPUS, LABEL
 
 def test_evaluation_engine_initialization():
     engine = EvaluationEngine(BENCHMARK_CORPUS)
-    assert len(engine.corpus) == 20
-    assert engine.bm25.corpus_size == 20
+    assert len(engine.corpus) == 25
+    assert engine.bm25.corpus_size == 25
+
 
 def test_evaluation_engine_retrieval_modes():
     engine = EvaluationEngine(BENCHMARK_CORPUS)
