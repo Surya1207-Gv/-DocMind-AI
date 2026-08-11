@@ -1,0 +1,386 @@
+{
+  "documents": [
+    {
+      "doc_id": "doc_ai_fund",
+      "filename": "AI_Fundamentals.pdf",
+      "description": "Comprehensive overview of AI architectures, supervised/unsupervised learning, reinforcement learning, and transformers."
+    },
+    {
+      "doc_id": "doc_cloud_aws",
+      "filename": "Cloud_AWS_Architecture.pdf",
+      "description": "Enterprise cloud computing guide covering VPC, IAM, S3 storage tiers, EC2 auto-scaling, and Disaster Recovery RTO/RPO."
+    },
+    {
+      "doc_id": "doc_cyber_sec",
+      "filename": "Cybersecurity_Protocols.pdf",
+      "description": "Zero Trust network architecture, AES-256 GCM encryption, SOC 2 compliance, and incident response lifecycles."
+    },
+    {
+      "doc_id": "doc_fin_risk",
+      "filename": "Financial_Risk_Compliance.pdf",
+      "description": "Basel III capital adequacy, AML KYC transaction monitoring, chargeback disputes, and PCI-DSS requirements."
+    }
+  ],
+  "queries": [
+    {
+      "id": "q001",
+      "query": "What is Artificial Intelligence?",
+      "doc_id": "doc_ai_fund",
+      "query_type": "definitional",
+      "relevant_chunk_indices": [0],
+      "notes": "Definitional statement of AI branch of computer science in chunk c01"
+    },
+    {
+      "id": "q002",
+      "query": "Define Supervised Learning",
+      "doc_id": "doc_ai_fund",
+      "query_type": "definitional",
+      "relevant_chunk_indices": [3],
+      "notes": "Supervised learning formal definition in chunk c04"
+    },
+    {
+      "id": "q003",
+      "query": "What are the healthcare applications of AI?",
+      "doc_id": "doc_ai_fund",
+      "query_type": "factual",
+      "relevant_chunk_indices": [1],
+      "notes": "Medical imaging, pulmonary nodule detection with 94% sensitivity in chunk c02"
+    },
+    {
+      "id": "q004",
+      "query": "What is Machine Learning?",
+      "doc_id": "doc_ai_fund",
+      "query_type": "definitional",
+      "relevant_chunk_indices": [2],
+      "notes": "Machine learning definition as subset of AI learning patterns in chunk c03"
+    },
+    {
+      "id": "q005",
+      "query": "Define Unsupervised Learning",
+      "doc_id": "doc_ai_fund",
+      "query_type": "definitional",
+      "relevant_chunk_indices": [4],
+      "notes": "Unsupervised learning definition discovering latent representations in chunk c05"
+    },
+    {
+      "id": "q006",
+      "query": "What is Reinforcement Learning?",
+      "doc_id": "doc_ai_fund",
+      "query_type": "definitional",
+      "relevant_chunk_indices": [5],
+      "notes": "RL agent reward maximization definition in chunk c06"
+    },
+    {
+      "id": "q007",
+      "query": "What is the Transformer architecture and self-attention mechanism?",
+      "doc_id": "doc_ai_fund",
+      "query_type": "factual",
+      "relevant_chunk_indices": [6],
+      "notes": "Vaswani 2017 multi-head self-attention mechanisms in chunk c07"
+    },
+    {
+      "id": "q008",
+      "query": "Explain how Retrieval-Augmented Generation works",
+      "doc_id": "doc_ai_fund",
+      "query_type": "factual",
+      "relevant_chunk_indices": [7],
+      "notes": "RAG external knowledge vector retrieval and grounding in chunk c08"
+    },
+    {
+      "id": "q009",
+      "query": "What are the common evaluation metrics for LLMs like BLEU, ROUGE, and BERTScore?",
+      "doc_id": "doc_ai_fund",
+      "query_type": "factual",
+      "relevant_chunk_indices": [8],
+      "notes": "Evaluation metrics for generated text in chunk c09"
+    },
+    {
+      "id": "q010",
+      "query": "How do Supervised and Unsupervised Learning differ?",
+      "doc_id": "doc_ai_fund",
+      "query_type": "comparative",
+      "relevant_chunk_indices": [3, 4],
+      "notes": "Supervised labeled loss minimization vs unsupervised latent clustering"
+    },
+    {
+      "id": "q011",
+      "query": "How does RAG compare to traditional LLM fine-tuning?",
+      "doc_id": "doc_ai_fund",
+      "query_type": "comparative",
+      "relevant_chunk_indices": [7],
+      "notes": "Dynamic retrieval without retraining vs static parametric weights"
+    },
+    {
+      "id": "q012",
+      "query": "What is a Virtual Private Cloud (VPC)?",
+      "doc_id": "doc_cloud_aws",
+      "query_type": "definitional",
+      "relevant_chunk_indices": [9],
+      "notes": "VPC isolated virtual network definition in chunk c10"
+    },
+    {
+      "id": "q013",
+      "query": "What is AWS IAM?",
+      "doc_id": "doc_cloud_aws",
+      "query_type": "definitional",
+      "relevant_chunk_indices": [10],
+      "notes": "IAM authentication and authorization framework in chunk c11"
+    },
+    {
+      "id": "q014",
+      "query": "Explain Amazon S3 storage classes and lifecycle policies",
+      "doc_id": "doc_cloud_aws",
+      "query_type": "factual",
+      "relevant_chunk_indices": [11],
+      "notes": "S3 Standard, Infrequent Access, Glacier, and Glacier Deep Archive in chunk c12"
+    },
+    {
+      "id": "q015",
+      "query": "How does EC2 Auto Scaling and Elastic Load Balancing maintain availability?",
+      "doc_id": "doc_cloud_aws",
+      "query_type": "factual",
+      "relevant_chunk_indices": [12],
+      "notes": "Target tracking, health checks, multi-AZ distribution in chunk c13"
+    },
+    {
+      "id": "q016",
+      "query": "What are Disaster Recovery strategies like RTO and RPO?",
+      "doc_id": "doc_cloud_aws",
+      "query_type": "factual",
+      "relevant_chunk_indices": [13],
+      "notes": "Recovery Time Objective and Recovery Point Objective across backup tiers in chunk c14"
+    },
+    {
+      "id": "q017",
+      "query": "How does S3 Standard storage compare with Glacier Deep Archive in cost and access latency?",
+      "doc_id": "doc_cloud_aws",
+      "query_type": "comparative",
+      "relevant_chunk_indices": [11],
+      "notes": "Milliseconds latency vs 12-hour retrieval for archival storage"
+    },
+    {
+      "id": "q018",
+      "query": "What is Zero Trust Architecture?",
+      "doc_id": "doc_cyber_sec",
+      "query_type": "definitional",
+      "relevant_chunk_indices": [14],
+      "notes": "Zero trust security model never trust always verify in chunk c15"
+    },
+    {
+      "id": "q019",
+      "query": "Explain AES-256 encryption and TLS 1.3 cryptographic protocols",
+      "doc_id": "doc_cyber_sec",
+      "query_type": "factual",
+      "relevant_chunk_indices": [15],
+      "notes": "Symmetric AES-GCM data at rest and TLS 1.3 forward secrecy in chunk c16"
+    },
+    {
+      "id": "q020",
+      "query": "What are SOC 2 compliance trust service criteria?",
+      "doc_id": "doc_cyber_sec",
+      "query_type": "factual",
+      "relevant_chunk_indices": [16],
+      "notes": "Security, Availability, Processing Integrity, Confidentiality, Privacy in chunk c17"
+    },
+    {
+      "id": "q021",
+      "query": "Describe the Security Incident Response lifecycle according to NIST",
+      "doc_id": "doc_cyber_sec",
+      "query_type": "factual",
+      "relevant_chunk_indices": [17],
+      "notes": "Preparation, Detection & Analysis, Containment, Post-Incident Activity in chunk c18"
+    },
+    {
+      "id": "q022",
+      "query": "What is the difference between SOC 2 Type 1 and Type 2 reports?",
+      "doc_id": "doc_cyber_sec",
+      "query_type": "comparative",
+      "relevant_chunk_indices": [16],
+      "notes": "Point-in-time design assessment vs operating effectiveness over 6-12 months"
+    },
+    {
+      "id": "q023",
+      "query": "What is Basel III Capital Adequacy?",
+      "doc_id": "doc_fin_risk",
+      "query_type": "definitional",
+      "relevant_chunk_indices": [18],
+      "notes": "International regulatory framework for bank capital adequacy in chunk c19"
+    },
+    {
+      "id": "q024",
+      "query": "Explain Anti-Money Laundering (AML) and Know Your Customer (KYC) compliance",
+      "doc_id": "doc_fin_risk",
+      "query_type": "factual",
+      "relevant_chunk_indices": [19],
+      "notes": "Customer identification, SAR reporting, sanctions screening in chunk c20"
+    },
+    {
+      "id": "q025",
+      "query": "How does the payment chargeback dispute lifecycle work?",
+      "doc_id": "doc_fin_risk",
+      "query_type": "factual",
+      "relevant_chunk_indices": [20],
+      "notes": "Retrieval request, first chargeback, representment, pre-arbitration in chunk c21"
+    },
+    {
+      "id": "q026",
+      "query": "What are the core PCI-DSS 4.0 security requirements?",
+      "doc_id": "doc_fin_risk",
+      "query_type": "factual",
+      "relevant_chunk_indices": [21],
+      "notes": "12 technical requirements for securing cardholder data environment in chunk c22"
+    },
+    {
+      "id": "q027",
+      "query": "How does Tier 1 common equity compare with Tier 2 supplemental capital under Basel III?",
+      "doc_id": "doc_fin_risk",
+      "query_type": "comparative",
+      "relevant_chunk_indices": [18],
+      "notes": "Core loss-absorbing equity vs subordinated debt and hybrid instruments"
+    },
+    {
+      "id": "q028",
+      "query": "What is Liquidity Coverage Ratio (LCR)?",
+      "doc_id": "doc_fin_risk",
+      "query_type": "definitional",
+      "relevant_chunk_indices": [22],
+      "notes": "LCR requirement to hold high-quality liquid assets for 30-day stress scenario in chunk c23"
+    },
+    {
+      "id": "q029",
+      "query": "How are high-risk financial transactions flagged during real-time fraud monitoring?",
+      "doc_id": "doc_fin_risk",
+      "query_type": "factual",
+      "relevant_chunk_indices": [23],
+      "notes": "Velocity checks, geolocation anomalies, machine learning risk scoring in chunk c24"
+    },
+    {
+      "id": "q030",
+      "query": "Explain the differences between automated fraud detection and human investigator compliance review",
+      "doc_id": "doc_fin_risk",
+      "query_type": "comparative",
+      "relevant_chunk_indices": [19, 23],
+      "notes": "Sub-second millisecond rule execution vs forensic SAR filing investigations"
+    },
+    {
+      "id": "q031",
+      "query": "How does Disaster Recovery RTO impact database replication design?",
+      "doc_id": "doc_cloud_aws",
+      "query_type": "multi_hop",
+      "relevant_chunk_indices": [13],
+      "notes": "Multi-hop connection between recovery time objectives and synchronous Aurora read replicas"
+    },
+    {
+      "id": "q032",
+      "query": "What security mechanisms protect cardholder data both at rest and in transit according to PCI-DSS?",
+      "doc_id": "doc_fin_risk",
+      "query_type": "multi_hop",
+      "relevant_chunk_indices": [15, 21],
+      "notes": "Multi-hop cross between cryptographic standards AES/TLS and PCI-DSS requirement 3 & 4"
+    },
+    {
+      "id": "q033",
+      "query": "Define Net Stable Funding Ratio (NSFR)",
+      "doc_id": "doc_fin_risk",
+      "query_type": "definitional",
+      "relevant_chunk_indices": [22],
+      "notes": "NSFR structural long-term liquidity metric over one-year horizon"
+    },
+    {
+      "id": "q034",
+      "query": "How does Zero Trust enforce access control across AWS IAM roles and VPC security groups?",
+      "doc_id": "doc_cyber_sec",
+      "query_type": "multi_hop",
+      "relevant_chunk_indices": [9, 10, 14],
+      "notes": "Multi-hop synthesis across Zero Trust principles, IAM policies, and VPC micro-segmentation"
+    },
+    {
+      "id": "q035",
+      "query": "What is the role of Loss Function and Gradient Descent in neural network optimization?",
+      "doc_id": "doc_ai_fund",
+      "query_type": "factual",
+      "relevant_chunk_indices": [3],
+      "notes": "Gradient descent backpropagation and loss surface minimization"
+    },
+    {
+      "id": "q036",
+      "query": "Compare Multi-AZ database deployments with Cross-Region replication for disaster recovery",
+      "doc_id": "doc_cloud_aws",
+      "query_type": "comparative",
+      "relevant_chunk_indices": [12, 13],
+      "notes": "High availability synchronous failover vs geographic disaster recovery"
+    },
+    {
+      "id": "q037",
+      "query": "What is Suspicious Activity Report (SAR)?",
+      "doc_id": "doc_fin_risk",
+      "query_type": "definitional",
+      "relevant_chunk_indices": [19],
+      "notes": "Mandatory regulatory filing for transactions involving suspected money laundering"
+    },
+    {
+      "id": "q038",
+      "query": "Explain how multi-head attention computes context vectors in transformer models",
+      "doc_id": "doc_ai_fund",
+      "query_type": "factual",
+      "relevant_chunk_indices": [6],
+      "notes": "Queries, Keys, Values dot-product softmax scaling across attention heads"
+    },
+    {
+      "id": "q039",
+      "query": "What are the stages of NIST Incident Response containment strategies?",
+      "doc_id": "doc_cyber_sec",
+      "query_type": "factual",
+      "relevant_chunk_indices": [17],
+      "notes": "Short-term isolation, system imaging, forensic evidence preservation"
+    },
+    {
+      "id": "q040",
+      "query": "How does Okapi BM25 ranking algorithm score keyword match relevance?",
+      "doc_id": "doc_ai_fund",
+      "query_type": "factual",
+      "relevant_chunk_indices": [24],
+      "notes": "BM25 inverse document frequency, term saturation, and document length normalization in chunk c25"
+    },
+    {
+      "id": "q041",
+      "query": "What is Hybrid Retrieval in modern RAG systems?",
+      "doc_id": "doc_ai_fund",
+      "query_type": "definitional",
+      "relevant_chunk_indices": [7, 24],
+      "notes": "Definition of hybrid retrieval combining dense vector similarity with sparse BM25 keyword matching"
+    },
+    {
+      "id": "q042",
+      "query": "Compare symmetric AES encryption with asymmetric RSA key exchange",
+      "doc_id": "doc_cyber_sec",
+      "query_type": "comparative",
+      "relevant_chunk_indices": [15],
+      "notes": "Block cipher high throughput vs asymmetric key pair authentication"
+    },
+    {
+      "id": "q043",
+      "query": "What triggers a pre-arbitration review in Visa and Mastercard dispute lifecycles?",
+      "doc_id": "doc_fin_risk",
+      "query_type": "factual",
+      "relevant_chunk_indices": [20],
+      "notes": "Second decline of representment evidence leading to network arbitration"
+    },
+    {
+      "id": "q044",
+      "query": "How does AWS IAM Role assumption using STS provide temporary credentials?",
+      "doc_id": "doc_cloud_aws",
+      "query_type": "factual",
+      "relevant_chunk_indices": [10],
+      "notes": "Security Token Service AssumeRole generating short-lived access keys"
+    },
+    {
+      "id": "q045",
+      "query": "How does vector index chunk overlap prevent sentence boundary information loss?",
+      "doc_id": "doc_ai_fund",
+      "query_type": "multi_hop",
+      "relevant_chunk_indices": [7, 24],
+      "notes": "Multi-hop synthesis between sliding window overlap and retrieval coherence"
+    }
+  ]
+}

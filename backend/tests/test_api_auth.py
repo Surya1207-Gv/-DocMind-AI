@@ -29,12 +29,13 @@ def test_register_invalid_email(client):
     payload = {
         "username": "newuser2",
         "password": "securepwd",
-        "email": "newuser2@yahoo.com", # Non-Google email
+        "email": "invalid-email-format", # Malformed email without @ or domain
         "full_name": "New User Two"
     }
     resp = client.post("/api/auth/register", json=payload)
     assert resp.status_code == 400
-    assert "requires a google email" in resp.json()["detail"].lower()
+    assert "invalid email" in resp.json()["detail"].lower()
+
 
 def test_register_short_username(client):
     payload = {

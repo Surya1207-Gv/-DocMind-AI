@@ -1,13 +1,15 @@
 import os
+import re
 import json
 import shutil
 import uuid
 from datetime import datetime
 from typing import List, Dict, Any, Optional
-from fastapi import FastAPI, UploadFile, File, HTTPException, BackgroundTasks, Depends, status
+from fastapi import FastAPI, UploadFile, File, HTTPException, BackgroundTasks, Depends, Request, status
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import StreamingResponse
+from fastapi.responses import StreamingResponse, JSONResponse
 from pydantic import BaseModel
+
 
 from backend.config import UPLOAD_DIR, BASE_DIR
 from backend.models import (
@@ -21,12 +23,13 @@ from backend.chat_engine import run_chat_stream
 from backend.analytics_engine import analyze_document
 from backend.quiz_engine import generate_document_quiz
 from backend.compare_engine import compare_documents
-from backend.agent_engine import run_agent_query
+from backend.agent_engine import run_agent_query, run_agent_stream
 
 # Authenticated & Database layers
 from backend.auth import get_current_user, hash_password, verify_password, create_access_token
 import backend.database as db
 from backend.logger import get_logger, telemetry
+from backend.config import FAISS_DIR
 
 logger = get_logger(__name__)
 
@@ -34,8 +37,8 @@ logger = get_logger(__name__)
 app = FastAPI(title="DocMind - Backend API")
 
 # Configure environment-driven CORS
-CORS_ORIGINS_ENV = os.getenv("CORS_ORIGINS", "http://localhost:5173,http://localhost:3000,http://127.0.0.1:5173,http://127.0.0.1:3000")
-ALLOWED_ORIGINS = [origin.strip() for origin in CORS_ORIGINS_ENV.split(",") if origin.strip()]
+ALLOWED_ORIGINS_ENV = os.getenv("ALLOWED_ORIGINS") or os.getenv("CORS_ORIGINS", "http://localhost:5173,http://localhost:3000,http://127.0.0.1:5173,http://127.0.0.1:3000")
+ALLOWED_ORIGINS = [origin.strip() for origin in ALLOWED_ORIGINS_ENV.split(",") if origin.strip()]
 if "*" in ALLOWED_ORIGINS:
     ALLOWED_ORIGINS = ["*"]
 
@@ -46,6 +49,16 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+@app.middleware("http")
+async def correlation_id_middleware(request: Request, call_next):
+    req_id = request.headers.get("X-Request-ID") or str(uuid.uuid4())
+    request.state.request_id = req_id
+    response = await call_next(request)
+    response.headers["X-Request-ID"] = req_id
+    return response
+
+
 
 
 # Authentication Request & Response schemas
@@ -126,7 +139,27 @@ migrate_metadata_json()
 # --- Health Check ---
 @app.get("/api/health")
 def health_check():
-    return {"status": "healthy", "time": datetime.utcnow().isoformat()}
+    db_ok = False
+    try:
+        with db.get_db_connection() as conn:
+            cur = conn.cursor()
+            cur.execute("SELECT 1")
+            db_ok = True
+    except Exception as e:
+        logger.error("Health check DB probe failed: %s", e)
+
+    faiss_writable = os.access(FAISS_DIR, os.W_OK) if os.path.exists(FAISS_DIR) else True
+    llm_configured = bool(os.getenv("OPENROUTER_API_KEY") or os.getenv("GEMINI_API_KEY"))
+
+    status_str = "healthy" if (db_ok and faiss_writable and llm_configured) else "degraded"
+    return {
+        "status": status_str,
+        "database": "connected" if db_ok else "disconnected",
+        "faiss_indices_writable": faiss_writable,
+        "llm_provider": "configured" if llm_configured else "missing_api_key",
+        "time": datetime.utcnow().isoformat()
+    }
+
 
 @app.get("/")
 def read_root():
@@ -150,11 +183,9 @@ def register_user(request: UserRegisterRequest):
         raise HTTPException(status_code=400, detail="Username must be >= 3 chars, password >= 4 chars.")
     if len(full_name) < 2:
         raise HTTPException(status_code=400, detail="Full name must be >= 2 characters.")
-    if "@" not in email or "." not in email:
+    email_pattern = r'^[a-zA-Z0-9_.+-]+@[a-zA-Z0-9-]+\.[a-zA-Z0-9-.]+$'
+    if not re.match(email_pattern, email):
         raise HTTPException(status_code=400, detail="Invalid email address structure.")
-    lower_email = email.lower()
-    if not (lower_email.endswith("@gmail.com") or lower_email.endswith("@google.com") or lower_email.endswith("@googlemail.com")):
-        raise HTTPException(status_code=400, detail="Registration requires a Google email account (@gmail.com or @google.com).")
         
     # Check if username exists
     existing_uname = db.get_user_by_username(username)
@@ -288,10 +319,17 @@ async def upload_document(
     file: UploadFile = File(...),
     current_user: dict = Depends(get_current_user)
 ):
-    if not file.filename.endswith(".pdf"):
+    if not file.filename.lower().endswith(".pdf"):
         raise HTTPException(status_code=400, detail="Only PDF files are supported.")
         
+    # Magic-byte check: verify binary starts with %PDF
+    header = await file.read(4)
+    await file.seek(0)
+    if header != b"%PDF":
+        raise HTTPException(status_code=400, detail="Invalid PDF file format. File must start with '%PDF' header.")
+        
     doc_id = str(uuid.uuid4())
+
     file_path = os.path.join(UPLOAD_DIR, f"{doc_id}.pdf")
     
     # Save PDF locally
@@ -544,6 +582,21 @@ def agent_query_endpoint(request: AgentQueryRequest, current_user: dict = Depend
         logger.error("Error executing LangGraph agent query: %s", e)
         raise HTTPException(status_code=500, detail=f"Error executing agent query: {str(e)}")
 
+@app.post("/api/chat/agent")
+async def chat_agent_endpoint(request: ChatRequest, current_user: dict = Depends(get_current_user)):
+    """
+    Executes LangGraph multi-hop agent reasoning and streams intermediate steps and final answer over SSE.
+    """
+    logger.info("[API Chat Agent Stream] User: %s | Query: '%s' | Doc: %s", current_user.get('username'), request.question, request.doc_id)
+    doc = db.get_document(request.doc_id, current_user["id"])
+    if not doc:
+        raise HTTPException(status_code=404, detail="Document not found or unauthorized.")
+        
+    return StreamingResponse(
+        run_agent_stream(request.question, [request.doc_id], mode=request.mode),
+        media_type="text/event-stream"
+    )
+
 @app.get("/api/telemetry")
 def get_telemetry_summary(current_user: dict = Depends(get_current_user)):
     """
@@ -551,4 +604,12 @@ def get_telemetry_summary(current_user: dict = Depends(get_current_user)):
     average query latencies, and threshold passage counts.
     """
     return telemetry.get_summary()
+
+@app.get("/api/metrics")
+def get_metrics_summary(current_user: dict = Depends(get_current_user)):
+    """
+    Returns aggregate RAG operational metrics and counters for production observability.
+    """
+    return telemetry.get_summary()
+
 

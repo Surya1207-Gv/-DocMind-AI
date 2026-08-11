@@ -203,10 +203,22 @@ class SimpleBM25:
             
         return score
 
-def search_index(query: str, doc_ids: List[str], top_k: int = 4) -> List[Tuple[Any, float]]:
+def search_index(
+    query: str,
+    doc_ids: List[str],
+    top_k: int = 4,
+    use_vector: bool = True,
+    use_bm25: bool = True,
+    use_boosts: bool = True,
+    boost_def_pattern: bool = True,
+    boost_proximity: bool = True,
+    boost_header: bool = True,
+    relevance_threshold: float = 0.50,
+) -> List[Tuple[Any, float]]:
     """
     Searches across specified doc_ids by loading and merging their FAISS indices.
     Retrieves candidates, re-ranks them using BM25 hybrid search, and returns top results.
+    Optional flags allow empirical IR evaluation and ablation sweeps without altering production defaults.
     """
     embeddings = get_embeddings_model()
     
@@ -265,7 +277,6 @@ def search_index(query: str, doc_ids: List[str], top_k: int = 4) -> List[Tuple[A
     max_bm25 = max(bm25_scores) if bm25_scores else 0.0
     bm25_ms = (time.perf_counter() - t_bm25_start) * 1000.0
 
-    
     q_lower = query.lower().strip()
     is_definition_query = q_lower.startswith(("what is", "what are", "define", "meaning of", "explain what", "describe"))
     
@@ -282,6 +293,7 @@ def search_index(query: str, doc_ids: List[str], top_k: int = 4) -> List[Tuple[A
         subject = subject.strip("? .!").strip()
 
     scored_candidates = []
+    applied_boost_types = []
     for i, (doc, vector_distance) in enumerate(candidates):
         # Convert vector distance to a normalized 0-1 similarity score
         # FAISS uses L2 distance. score 0 means identical, >=2 means very distant.
@@ -290,49 +302,59 @@ def search_index(query: str, doc_ids: List[str], top_k: int = 4) -> List[Tuple[A
         # Normalize BM25 score
         bm25_normalized = (bm25_scores[i] / max_bm25) if max_bm25 > 0.0 else 0.0
         
-        # Compute base hybrid score (0.6 weight on vector search, 0.4 weight on keyword match)
-        hybrid_score = 0.6 * vector_sim + 0.4 * bm25_normalized
+        # Compute base score depending on active retrieval components
+        if use_vector and use_bm25:
+            hybrid_score = 0.6 * vector_sim + 0.4 * bm25_normalized
+        elif use_vector and not use_bm25:
+            hybrid_score = vector_sim
+        elif not use_vector and use_bm25:
+            hybrid_score = bm25_normalized
+        else:
+            hybrid_score = 0.0
         
         # Custom boosting
         custom_boost = 0.0
         doc_text_lower = doc.page_content.lower()
         
-        # 1. Definition pattern boost
-        if is_definition_query:
-            # Base definition pattern check
-            def_patterns = ["is a", "refers to", "defined as", "can be defined as", "means", "is the general term", "is a type of"]
-            if any(pat in doc_text_lower for pat in def_patterns):
-                custom_boost += 0.05
-            
-            # Precise subject definition proximity check
-            if subject:
-                subject_esc = re.escape(subject)
-                pattern_regex = re.compile(
-                    rf"{subject_esc}\b"
-                    rf"(?:\s*\([^)]*\))?"
-                    rf"(?:\s*,\s*[^,]+,\s*)?"
-                    rf"(?:\s*(?:sometimes|commonly|also|frequently|often|abbreviated\s+to\s+['\"\w\s.-]+|referred\s+to\s+as\s+['\"\w\s.-]+))*"
-                    rf"\s+\b(is\s+a|refers\s+to|means|is\s+the\s+general\s+term|is\s+defined\s+as|can\s+be\s+defined\s+as|is\s+a\s+relatively\s+new\s+form|is\s+a\s+type\s+of)\b",
-                    re.IGNORECASE
-                )
-                if pattern_regex.search(doc.page_content):
-                    custom_boost += 0.45
+        if use_boosts:
+            # 1. Definition pattern boost
+            if is_definition_query and boost_def_pattern:
+                def_patterns = ["is a", "refers to", "defined as", "can be defined as", "means", "is the general term", "is a type of"]
+                if any(pat in doc_text_lower for pat in def_patterns):
+                    custom_boost += 0.05
+                    applied_boost_types.append("def_pattern")
                 
-        # 2. Section/Header match boost
-        # Look for short uppercase headers in the chunk text matching query content words
-        lines = doc.page_content.split("\n")
-        for line in lines:
-            parts = re.split(r'[|<>]', line)
-            for part in parts:
-                part_strip = part.strip()
-                if 2 < len(part_strip) < 40 and part_strip.isupper():
-                    if any(word in part_strip.lower() for word in query_content_words):
-                        custom_boost += 0.10
-                        break
-            else:
-                continue
-            break
+                # Precise subject definition proximity check
+                if subject and boost_proximity:
+                    subject_esc = re.escape(subject)
+                    pattern_regex = re.compile(
+                        rf"{subject_esc}\b"
+                        rf"(?:\s*\([^)]*\))?"
+                        rf"(?:\s*,\s*[^,]+,\s*)?"
+                        rf"(?:\s*(?:sometimes|commonly|also|frequently|often|abbreviated\s+to\s+['\"\w\s.-]+|referred\s+to\s+as\s+['\"\w\s.-]+))*"
+                        rf"\s+\b(is\s+a|refers\s+to|means|is\s+the\s+general\s+term|is\s+defined\s+as|can\s+be\s+defined\s+as|is\s+a\s+relatively\s+new\s+form|is\s+a\s+type\s+of)\b",
+                        re.IGNORECASE
+                    )
+                    if pattern_regex.search(doc.page_content):
+                        custom_boost += 0.45
+                        applied_boost_types.append("proximity")
                     
+            # 2. Section/Header match boost
+            if boost_header:
+                lines = doc.page_content.split("\n")
+                for line in lines:
+                    parts = re.split(r'[|<>]', line)
+                    for part in parts:
+                        part_strip = part.strip()
+                        if 2 < len(part_strip) < 40 and part_strip.isupper():
+                            if any(word in part_strip.lower() for word in query_content_words):
+                                custom_boost += 0.10
+                                applied_boost_types.append("header")
+                                break
+                    else:
+                        continue
+                    break
+                        
         # Apply boost and cap at 1.0
         hybrid_score = min(1.0, hybrid_score + custom_boost)
         
@@ -341,20 +363,13 @@ def search_index(query: str, doc_ids: List[str], top_k: int = 4) -> List[Tuple[A
     # Sort candidates by combined hybrid score descending
     scored_candidates.sort(key=lambda x: x[2], reverse=True)
     
-    # Log information about re-ranking
-    if scored_candidates:
-        orig_top = candidates[0][0].page_content[:50].replace("\n", " ")
-        new_top = scored_candidates[0][0].page_content[:50].replace("\n", " ")
-        logger.info("[Reranking] Re-evaluated %d candidates. Orig top: '%s', New top: '%s'", len(candidates), orig_top, new_top)
-        
     # Return formatted list matching (Document, score) where score is translated back 
     # to simulated L2 distance matching the hybrid score (for downstream confidence scores)
-    # distance = 2.0 * (1.0 - hybrid_score)
-    # Filter out low-relevance references below 50% Match
+    # Filter out low-relevance references below relevance threshold
     final_results = []
     seen_chunks = set()
     for doc, _, hybrid_score in scored_candidates[:top_k]:
-        if hybrid_score < 0.50:
+        if hybrid_score < relevance_threshold:
             continue
             
         doc_id = doc.metadata.get("doc_id")
@@ -363,6 +378,7 @@ def search_index(query: str, doc_ids: List[str], top_k: int = 4) -> List[Tuple[A
         if (doc_id, chunk_idx) in seen_chunks:
             continue
         seen_chunks.add((doc_id, chunk_idx))
+
         
         expanded_content = doc.page_content
         

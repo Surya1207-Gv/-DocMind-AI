@@ -283,3 +283,60 @@ def run_agent_query(query: str, doc_ids: List[str], mode: str = "deep") -> Dict[
         "sources": final_state["sources"],
         "verification_status": final_state["verification_status"]
     }
+
+
+def run_agent_stream(query: str, doc_ids: List[str], mode: str = "deep"):
+    """
+    Generator yielding Server-Sent Events (SSE) for LangGraph intermediate steps,
+    token stream, metadata, and verified sources.
+    """
+    # 1. Step: Planning
+    yield f"data: {json.dumps({'type': 'step', 'step': 'planning', 'message': 'Decomposing question into sub-queries...'})}\n\n"
+    
+    initial_state: AgentState = {
+        "original_query": query,
+        "doc_ids": doc_ids,
+        "mode": mode,
+        "sub_queries": [],
+        "retrieved_chunks": [],
+        "draft_answer": "",
+        "verified_answer": "",
+        "verification_status": {},
+        "sources": [],
+        "confidence": 0,
+        "confidence_label": "Low"
+    }
+    
+    plan_result = planner_node(initial_state)
+    sub_queries = plan_result["sub_queries"]
+    initial_state["sub_queries"] = sub_queries
+    
+    # 2. Step: Retrieving per sub-query
+    for idx, sq in enumerate(sub_queries, 1):
+        yield f"data: {json.dumps({'type': 'step', 'step': 'retrieving', 'message': f'Retrieving context for sub-query {idx}/{len(sub_queries)}: \"{sq[:40]}...\"'})}\n\n"
+        
+    retrieval_result = retriever_node(initial_state)
+    initial_state.update(retrieval_result)
+    
+    # 3. Step: Synthesizing
+    yield f"data: {json.dumps({'type': 'step', 'step': 'synthesizing', 'message': 'Synthesizing grounded multi-source response...'})}\n\n"
+    synth_result = synthesizer_node(initial_state)
+    initial_state.update(synth_result)
+    
+    # 4. Step: Verifying
+    yield f"data: {json.dumps({'type': 'step', 'step': 'verifying', 'message': 'Verifying factual claims and pruning citations...'})}\n\n"
+    verifier_result = verifier_node(initial_state)
+    initial_state.update(verifier_result)
+    
+    verified_answer = initial_state["verified_answer"]
+    
+    # Stream answer tokens
+    words = verified_answer.split(" ")
+    for idx, word in enumerate(words):
+        chunk_text = word if idx == 0 else " " + word
+        yield f"data: {json.dumps({'type': 'token', 'text': chunk_text})}\n\n"
+        
+    # Emit final metadata and sources
+    yield f"data: {json.dumps({'type': 'metadata', 'confidence': initial_state['confidence'], 'confidence_label': initial_state['confidence_label'], 'sources': initial_state['sources'], 'verification_status': initial_state['verification_status'], 'sub_queries': initial_state['sub_queries']})}\n\n"
+    yield f"data: {json.dumps({'type': 'done'})}\n\n"
+
