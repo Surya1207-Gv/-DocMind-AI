@@ -7,8 +7,10 @@ from langchain_community.vectorstores import FAISS
 import requests
 from langchain_core.embeddings import Embeddings
 from backend.config import OPENROUTER_API_KEY, EMBEDDING_MODEL, FAISS_DIR
+from backend.logger import get_logger
 
-import time
+logger = get_logger(__name__)
+
 
 class OpenRouterEmbeddings(Embeddings):
     def __init__(self, model: str, api_key: str):
@@ -230,7 +232,7 @@ def search_index(query: str, doc_ids: List[str], top_k: int = 4) -> List[Tuple[A
                 else:
                     main_vector_store.merge_from(db)
             except Exception as e:
-                print(f"Error loading index for {doc_id}: {e}")
+                logger.error("Error loading index for %s: %s", doc_id, e)
                 
     if main_vector_store is None:
         return []
@@ -336,7 +338,7 @@ def search_index(query: str, doc_ids: List[str], top_k: int = 4) -> List[Tuple[A
     if scored_candidates:
         orig_top = candidates[0][0].page_content[:50].replace("\n", " ")
         new_top = scored_candidates[0][0].page_content[:50].replace("\n", " ")
-        print(f"[Reranking] Re-evaluated {len(candidates)} candidates. Orig top: '{orig_top}', New top: '{new_top}'")
+        logger.info("[Reranking] Re-evaluated %d candidates. Orig top: '%s', New top: '%s'", len(candidates), orig_top, new_top)
         
     # Return formatted list matching (Document, score) where score is translated back 
     # to simulated L2 distance matching the hybrid score (for downstream confidence scores)

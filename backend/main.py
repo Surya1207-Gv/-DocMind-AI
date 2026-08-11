@@ -16,7 +16,7 @@ from backend.models import (
 )
 from backend.pdf_processor import process_pdf
 from backend.embedding_manager import create_and_save_index, delete_index
-from backend.chat_engine import run_chat, run_chat_stream
+from backend.chat_engine import run_chat_stream
 from backend.analytics_engine import analyze_document
 from backend.quiz_engine import generate_document_quiz
 from backend.compare_engine import compare_documents
@@ -24,17 +24,26 @@ from backend.compare_engine import compare_documents
 # Authenticated & Database layers
 from backend.auth import get_current_user, hash_password, verify_password, create_access_token
 import backend.database as db
+from backend.logger import get_logger
+
+logger = get_logger(__name__)
 
 app = FastAPI(title="DocMind - Backend API")
 
-# Configure CORS
+# Configure environment-driven CORS
+CORS_ORIGINS_ENV = os.getenv("CORS_ORIGINS", "http://localhost:5173,http://localhost:3000,http://127.0.0.1:5173,http://127.0.0.1:3000")
+ALLOWED_ORIGINS = [origin.strip() for origin in CORS_ORIGINS_ENV.split(",") if origin.strip()]
+if "*" in ALLOWED_ORIGINS:
+    ALLOWED_ORIGINS = ["*"]
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"], # In development, allow all origins
+    allow_origins=ALLOWED_ORIGINS,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
 
 # Authentication Request & Response schemas
 class UserAuthRequest(BaseModel):
@@ -105,9 +114,9 @@ def migrate_metadata_json():
             
             # Rename file to metadata_migrated.json to prevent re-running next time
             os.rename(meta_path, os.path.join(BASE_DIR, "metadata_migrated.json"))
-            print("[Migration] Successfully migrated metadata.json to SQLite database.")
+            logger.info("[Migration] Successfully migrated metadata.json to SQLite database.")
         except Exception as e:
-            print(f"[Migration] Error migrating metadata.json: {e}")
+            logger.error("[Migration] Error migrating metadata.json: %s", e)
 
 migrate_metadata_json()
 
@@ -266,9 +275,9 @@ def background_analyze_task(chunks: List[Dict[str, Any]], doc_id: str, filename:
             [a.dict() for a in analytics.alerts],
             analytics.suggested_questions
         )
-        print(f"[Background Task] Analytics generated and saved for doc_id: {doc_id}")
+        logger.info("[Background Task] Analytics generated and saved for doc_id: %s", doc_id)
     except Exception as e:
-        print(f"[Background Task] Error generating analytics for doc_id {doc_id}: {e}")
+        logger.error("[Background Task] Error generating analytics for doc_id %s: %s", doc_id, e)
 
 @app.post("/api/upload")
 async def upload_document(
@@ -393,13 +402,13 @@ def delete_document(doc_id: str, current_user: dict = Depends(get_current_user))
         try:
             os.remove(file_path)
         except Exception as e:
-            print(f"Error removing PDF file: {e}")
+            logger.error("Error removing PDF file: %s", e)
             
     # Delete FAISS vector index
     try:
         delete_index(doc_id)
     except Exception as e:
-        print(f"Error removing FAISS index: {e}")
+        logger.error("Error removing FAISS index: %s", e)
         
     # Remove from SQLite (will cascade delete analytics, quizzes, chat_messages)
     db.delete_document(doc_id, current_user["id"])
@@ -410,7 +419,7 @@ def delete_document(doc_id: str, current_user: dict = Depends(get_current_user))
 
 @app.post("/api/chat")
 def chat_document(request: ChatRequest, current_user: dict = Depends(get_current_user)):
-    print(f"[API Chat] User: {current_user.get('username')} | Query: '{request.question}' | Docs: {request.doc_ids}")
+    logger.info("[API Chat] User: %s | Query: '%s' | Docs: %s", current_user.get('username'), request.question, request.doc_ids)
     # Verify ownership of target documents
     for doc_id in request.doc_ids:
         doc = db.get_document(doc_id, current_user["id"])

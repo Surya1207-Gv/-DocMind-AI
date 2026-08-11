@@ -32,13 +32,14 @@ Most "Chat with PDF" projects are simple wrappers: embed → store → retrieve 
 
 ## Key Engineering Achievements
 
-- **Engineered a production-grade RAG platform** implementing semantic chunking, embedding pipelines, FAISS vector retrieval, and grounded LLM generation with confidence scoring for reliable document intelligence.
+- **Engineered a production-grade RAG platform** implementing semantic chunking (1000 chars, 150 overlap), embedding pipelines, FAISS vector retrieval, and grounded LLM generation with confidence scoring for reliable document intelligence.
 
-- **Architected an autonomous agentic workflow** that performs entity extraction, executive summarization, complexity analysis, proactive alert generation, and suggested-question creation on every document upload.
+- **Architected an automated document intelligence pipeline** that performs entity extraction, executive summarization, complexity analysis, proactive alert generation, and suggested-question creation in the background on every document upload.
 
-- **Built a modular 6-engine AI backend** exposed through 15 API endpoints, incorporating Pydantic validation, fault-tolerant processing, rate-limit resilience, and scalable multi-document analysis.
+- **Built a modular 6-engine AI backend** exposed through 15 API endpoints, incorporating Pydantic validation, adjacent chunk expansion to prevent truncated sentences, automated LLM provider failover (Gemini → OpenRouter), and scalable multi-document analysis.
 
-- **Developed multi-document reasoning capabilities**, including cross-document comparison, structured MCQ generation, session-aware conversational memory, and a complete SaaS-ready React platform.
+- **Developed multi-document reasoning capabilities**, including cross-document comparison, structured MCQ generation, session-aware conversational memory (5-turn sliding window), and a complete SaaS-ready React platform.
+
 
 ---
 
@@ -317,14 +318,15 @@ The FastAPI endpoint returns a StreamingResponse with media_type="text/event-str
 
 The React frontend reads the SSE stream via fetch() with ReadableStream, accumulating tokens to progressively render the response.
 
-### How does the agentic analytics pipeline work?
+### How does the automated document analytics pipeline work?
 
-On every PDF upload, the backend automatically:
-1. Chunks the document with 2000-char chunks + 300-char overlap
-2. Passes representative chunks to the LLM with a structured JSON-schema prompt
-3. LLM returns a validated Pydantic model: {summary, entities, alerts, suggested_questions}
-4. Complexity is computed via word-per-sentence and syllable count heuristics
+On every PDF upload, the backend automatically runs a background task that:
+1. Chunks the document with 1000-char chunks + 150-char overlap (15% overlap)
+2. Passes representative header and body chunks to the LLM with a structured JSON-schema prompt
+3. Extracts a validated model: `{complexity_score, summary, entities, alerts, suggested_questions}`
+4. Evaluates structural density and technical vocabulary to classify reading difficulty (`Easy` | `Medium` | `Hard`)
 5. All results are cached in SQLite — subsequent analytics requests are instant
+
 
 ### Why FAISS instead of a cloud vector database?
 

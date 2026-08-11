@@ -2,6 +2,11 @@ from typing import List, Dict, Any
 from backend.models import CompareRequest, CompareResponse, DocumentCompareResult
 from backend.embedding_manager import search_index
 from backend.chat_engine import get_llm_model
+from backend.logger import get_logger
+
+logger = get_logger(__name__)
+
+
 
 def compare_documents(request: CompareRequest, documents_meta: Dict[str, Dict[str, Any]]) -> CompareResponse:
     """

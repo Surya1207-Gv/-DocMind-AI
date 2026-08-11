@@ -3,6 +3,10 @@ import re
 from typing import List, Dict, Any
 from backend.models import DocumentAnalytics, EntityInfo, SmartAlert
 from backend.chat_engine import get_llm_model
+from backend.logger import get_logger
+
+logger = get_logger(__name__)
+
 
 def analyze_document(chunks: List[Dict[str, Any]], doc_id: str, doc_name: str, page_count: int) -> DocumentAnalytics:
     """
@@ -75,7 +79,7 @@ def analyze_document(chunks: List[Dict[str, Any]], doc_id: str, doc_name: str, p
         
         data = json.loads(raw_content)
     except Exception as e:
-        print(f"Error in document analytics generation: {e}")
+        logger.error("Error in document analytics generation: %s", e)
         # Fail-safe data
         data = {
             "complexity_score": "Medium",

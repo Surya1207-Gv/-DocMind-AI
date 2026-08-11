@@ -3,6 +3,10 @@ import random
 from typing import List, Dict, Any
 from backend.models import QuizQuestion, QuizResponse
 from backend.chat_engine import get_llm_model
+from backend.logger import get_logger
+
+logger = get_logger(__name__)
+
 
 def generate_document_quiz(chunks: List[Dict[str, Any]], doc_id: str, count: int = 10) -> List[QuizQuestion]:
     """
@@ -77,7 +81,7 @@ def generate_document_quiz(chunks: List[Dict[str, Any]], doc_id: str, count: int
                 page_ref=q.get("page_ref", 1)
             ))
     except Exception as e:
-        print(f"Error generating quiz: {e}")
+        logger.error("Error generating quiz: %s", e)
         # Fall-safe placeholder questions
         questions = [
             QuizQuestion(

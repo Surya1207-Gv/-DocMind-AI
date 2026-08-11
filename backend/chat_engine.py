@@ -9,6 +9,9 @@ from langchain_core.language_models.chat_models import BaseChatModel
 from langchain_core.messages import BaseMessage, AIMessage, HumanMessage, SystemMessage
 from langchain_core.outputs import ChatResult, ChatGeneration
 
+from backend.logger import get_logger
+logger = get_logger(__name__)
+
 # Monkey patch langchain_google_genai to prevent infinite exponential backoff retry loops on quota/rate-limits
 try:
     import langchain_google_genai.chat_models
@@ -17,11 +20,12 @@ try:
         return retry(reraise=True, stop=stop_after_attempt(1))
     langchain_google_genai.chat_models._create_retry_decorator = _no_retry_decorator
 except Exception as e:
-    print(f"Error applying langchain_google_genai retry monkey patch: {e}")
+    logger.warning("Error applying langchain_google_genai retry monkey patch: %s", e)
 
 from backend.config import GEMINI_API_KEY, OPENROUTER_API_KEY, LLM_MODEL, TOP_K
 from backend.models import ChatRequest, ChatResponse, SourceChunk, ChatMessage
 from backend.embedding_manager import search_index
+from backend.database import save_chat_message
 
 # System Prompts for Different Modes
 SYSTEM_PROMPTS = {
@@ -99,7 +103,8 @@ class OpenRouterChat(BaseChatModel):
         response = requests.post(
             "https://openrouter.ai/api/v1/chat/completions",
             headers=headers,
-            json=payload
+            json=payload,
+            timeout=60
         )
         response.raise_for_status()
         data = response.json()
@@ -230,225 +235,10 @@ def classify_and_normalize_question(question: str) -> Dict[str, Any]:
         "explanation": "Bypassed LLM classification to reduce latency."
     }
 
-
-from backend.database import save_chat_message
-
 # Maximum number of conversation turns to send to the LLM
 # Older turns are dropped to prevent token overflow
 MAX_HISTORY_TURNS = 5  # 5 user + 5 assistant = 10 messages max
 
-def run_chat(request: ChatRequest) -> ChatResponse:
-    # 1. Classify the question
-    cls_data = classify_and_normalize_question(request.question)
-    cls_type = cls_data["classification"]
-    normalized_q = cls_data["corrected_query"]
-
-    # Check for non-retrieval classifications:
-    if cls_type == "CONVERSATIONAL":
-        system_prompt = (
-            "You are DocMind, a friendly and intelligent document analysis assistant.\n"
-            "You help users analyze documents, extract summaries, generate quizzes, and compare cross-references.\n"
-            "Since the user just greeted you or asked a general conversational question, respond in a friendly, polite, and brief manner.\n"
-            "Let them know you are DocMind and are ready to help them analyze the uploaded documents once they select or ask about them."
-        )
-        messages = [SystemMessage(content=system_prompt)]
-        if request.history:
-            for msg in request.history:
-                messages.append(HumanMessage(content=msg.content) if msg.role == "user" else AIMessage(content=msg.content))
-        messages.append(HumanMessage(content=request.question))
-        
-        try:
-            response = get_llm_model().invoke(messages)
-            answer = response.content
-        except Exception as e:
-            if GEMINI_API_KEY and OPENROUTER_API_KEY:
-                try:
-                    fallback_llm = OpenRouterChat(
-                        model=LLM_MODEL,
-                        api_key=OPENROUTER_API_KEY,
-                        temperature=0.2
-                    )
-                    response = fallback_llm.invoke(messages)
-                    answer = response.content
-                except Exception as e_fallback:
-                    answer = f"Error communicating with DocMind: {str(e_fallback)}"
-            else:
-                answer = f"Error communicating with DocMind: {str(e)}"
-        
-        return ChatResponse(
-            answer=answer,
-            confidence=0,
-            confidence_label="High",
-            sources=[],
-            mode=request.mode
-        )
-
-    elif cls_type == "OUT_OF_SCOPE":
-        answer = "I'm sorry, but that query is out of scope for the uploaded documents. Please ask a question related to the documents you have uploaded."
-        return ChatResponse(
-            answer=answer,
-            confidence=0,
-            confidence_label="Low",
-            sources=[],
-            mode=request.mode
-        )
-
-    elif cls_type == "AMBIGUOUS":
-        answer = "Your question is a bit ambiguous. Could you please specify which document or section you are referring to, or clarify what information you are looking for?"
-        return ChatResponse(
-            answer=answer,
-            confidence=0,
-            confidence_label="Low",
-            sources=[],
-            mode=request.mode
-        )
-
-    # Typo prefix note (if we corrected a typo)
-    prefix_note = ""
-    if cls_type == "TYPO" and normalized_q.strip().lower() != request.question.strip().lower():
-        prefix_note = f"*(Interpreted as: \"{normalized_q}\")*\n\n"
-
-    # Determine dynamic top_k based on mode
-    if request.mode == "qa":
-        mode_top_k = 3
-    elif request.mode == "summary":
-        mode_top_k = 5
-    elif request.mode == "deep":
-        mode_top_k = 9  # 8 to 10 chunks
-    else:
-        mode_top_k = 5  # default/eli5
-
-    # Search vector index using the normalized query!
-    search_results = search_index(normalized_q, request.doc_ids, top_k=mode_top_k)
-    
-    # If no results found, or all scores are below 0.65 threshold (meaning search_results is empty)
-    if not search_results:
-        return ChatResponse(
-            answer=prefix_note + "I cannot find any information related to your question in the uploaded documents. Please ask a question directly related to the documents.",
-            confidence=0,
-            confidence_label="Low",
-            sources=[],
-            mode=request.mode
-        )
-
-    context_parts = []
-    sources = []
-    raw_distances = []
-    
-    for idx, (doc, score) in enumerate(search_results):
-        raw_distances.append(score)
-        relevance = max(0.0, min(1.0, 1.0 - (score / 2.0)))
-        sources.append(SourceChunk(
-            text=doc.page_content,
-            page=doc.metadata.get("page", 1),
-            doc_id=doc.metadata.get("doc_id", ""),
-            doc_name=doc.metadata.get("doc_name", "Unknown Document"),
-            relevance=round(relevance * 100, 1)
-        ))
-        context_parts.append(
-            f"Source Index: {idx}\n"
-            f"Document: {doc.metadata.get('doc_name')} (Page {doc.metadata.get('page')})\n"
-            f"Content: {doc.page_content}\n"
-            f"---"
-        )
-        
-    context_str = "\n".join(context_parts)
-    if raw_distances:
-        avg_score = sum(raw_distances) / len(raw_distances)
-        confidence = int(max(0, min(100, (1.0 - (avg_score / 2.0)) * 100)))
-    else:
-        confidence = 0
-        
-    confidence_label = "High" if confidence >= 80 else ("Medium" if confidence >= 65 else "Low")
-    
-    system_prompt = SYSTEM_PROMPTS.get(request.mode, SYSTEM_PROMPTS["qa"])
-    
-    if request.mode == "eli5":
-        critical_rule = (
-            "CRITICAL RULE: Explain the facts from the CONTEXT above using very simple child-friendly analogies "
-            "(such as comparing AI to training a child or a robot). You may use these analogies to make it simple, "
-            "but do not introduce outside factual details, statistics, or metrics not in the context. "
-            "All core facts must remain strictly grounded in the context provided."
-        )
-    else:
-        critical_rule = (
-            "CRITICAL RULE: Answer using ONLY the direct facts explicitly stated in the CONTEXT above. "
-            "Do NOT introduce general facts, external descriptions, or general knowledge not present in the CONTEXT. "
-            "If the CONTEXT does not contain a specific fact or detail, omit it completely. "
-            "Keep your explanation strictly limited to the facts provided."
-        )
-        
-    system_content = (
-        f"{system_prompt}\n"
-        f"--- CONTEXT ---\n"
-        f"{context_str}\n"
-        f"--- END OF CONTEXT ---\n"
-        f"{critical_rule}"
-    )
-    
-    messages = [SystemMessage(content=system_content)]
-    if request.history:
-        for msg in request.history:
-            messages.append(HumanMessage(content=msg.content) if msg.role == "user" else AIMessage(content=msg.content))
-    messages.append(HumanMessage(content=normalized_q))
-    
-    try:
-        temp = get_mode_temperature(request.mode)
-        response = get_llm_model(temperature=temp).invoke(messages)
-        answer = response.content
-    except Exception as e:
-        if GEMINI_API_KEY and OPENROUTER_API_KEY:
-            try:
-                fallback_llm = OpenRouterChat(
-                    model=LLM_MODEL,
-                    api_key=OPENROUTER_API_KEY,
-                    temperature=temp
-                )
-                response = fallback_llm.invoke(messages)
-                answer = response.content
-            except Exception as e_fallback:
-                answer = f"Error communicating with DocMind: {str(e_fallback)}"
-        else:
-            answer = f"Error communicating with DocMind: {str(e)}"
-        
-    # Extract cited source indices and clean up answer
-    import re
-    cited_indices = []
-    match = re.search(r"Cited Source Indices:\s*([\d\s,]+)", answer, re.IGNORECASE)
-    if match:
-        idx_str = match.group(1)
-        cited_indices = [int(i.strip()) for i in idx_str.split(",") if i.strip().isdigit()]
-        
-    # Strip Cited Source Indices from answer
-    answer = re.sub(r"\n*Cited Source Indices:\s*.*", "", answer, flags=re.IGNORECASE).strip()
-    
-    if cited_indices:
-        filtered_sources = []
-        for idx in cited_indices:
-            if 0 <= idx < len(sources):
-                filtered_sources.append(sources[idx])
-        if filtered_sources:
-            sources = filtered_sources
-            
-    fallback_phrases = [
-        "cannot find that information", "cannot find this information", "not find that information",
-        "not find this information", "not present in the uploaded documents", "not mentioned in the provided",
-        "information is not in the", "not found in the uploaded", "do not contain information",
-        "does not contain information", "no information about", "unable to find", "cannot find information",
-        "not found in the provided", "not mention this", "not mention that"
-    ]
-    if any(phrase in answer.lower() for phrase in fallback_phrases):
-        sources = []
-        confidence = 0
-        confidence_label = "Low"
-        
-    return ChatResponse(
-        answer=prefix_note + answer,
-        confidence=confidence,
-        confidence_label=confidence_label,
-        sources=sources,
-        mode=request.mode
-    )
 
 def run_chat_stream(request: ChatRequest, user_id: str):
     """
@@ -464,6 +254,7 @@ def run_chat_stream(request: ChatRequest, user_id: str):
     confidence = 0
     confidence_label = "Low"
     full_answer = ""
+    prefix_note = ""
     
     if cls_type == "CONVERSATIONAL":
         system_prompt = (
@@ -517,7 +308,7 @@ def run_chat_stream(request: ChatRequest, user_id: str):
             save_chat_message(user_msg_id, user_id, doc_id, "user", request.question, 0, [], timestamp_str)
             save_chat_message(asst_msg_id, user_id, doc_id, "assistant", full_answer, 0, [], timestamp_str)
         except Exception as db_err:
-            print(f"Error persisting to SQLite: {db_err}")
+            logger.error("Error persisting to SQLite: %s", db_err)
             
         yield f"data: {json.dumps({'type': 'metadata', 'confidence': 0, 'confidence_label': 'Low', 'sources': [], 'content': full_answer, 'mode': request.mode})}\n\n"
         yield "data: {\"type\": \"done\"}\n\n"
@@ -549,7 +340,7 @@ def run_chat_stream(request: ChatRequest, user_id: str):
             save_chat_message(user_msg_id, user_id, doc_id, "user", request.question, 0, [], timestamp_str)
             save_chat_message(asst_msg_id, user_id, doc_id, "assistant", full_answer, 0, [], timestamp_str)
         except Exception as db_err:
-            print(f"Error persisting to SQLite: {db_err}")
+            logger.error("Error persisting to SQLite: %s", db_err)
             
         yield f"data: {json.dumps({'type': 'metadata', 'confidence': 0, 'confidence_label': 'Low', 'sources': [], 'content': full_answer, 'mode': request.mode})}\n\n"
         yield "data: {\"type\": \"done\"}\n\n"
@@ -603,7 +394,7 @@ def run_chat_stream(request: ChatRequest, user_id: str):
                 save_chat_message(user_msg_id, user_id, doc_id, "user", request.question, 0, [], timestamp_str)
                 save_chat_message(asst_msg_id, user_id, doc_id, "assistant", full_answer, 0, [], timestamp_str)
             except Exception as db_err:
-                print(f"Error persisting to SQLite: {db_err}")
+                logger.error("Error persisting to SQLite: %s", db_err)
                 
             yield f"data: {json.dumps({'type': 'metadata', 'confidence': 0, 'confidence_label': 'Low', 'sources': [], 'content': full_answer, 'mode': request.mode})}\n\n"
             yield "data: {\"type\": \"done\"}\n\n"
@@ -874,7 +665,7 @@ def run_chat_stream(request: ChatRequest, user_id: str):
             asst_msg_id, user_id, doc_id, "assistant", full_answer, confidence, [s.dict() for s in sources], timestamp_str
         )
     except Exception as db_err:
-        print(f"Error persisting conversation to SQLite: {db_err}")
+        logger.error("Error persisting conversation to SQLite: %s", db_err)
 
     # 3. Yield done event
     yield "data: {\"type\": \"done\"}\n\n"
