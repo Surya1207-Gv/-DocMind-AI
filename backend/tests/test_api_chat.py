@@ -140,3 +140,33 @@ def test_telemetry_endpoint(client, auth_headers):
     assert "zero_hit_rate_pct" in data
     assert "avg_latency_ms" in data
 
+def test_metrics_endpoint_counters(client, auth_headers):
+    resp = client.get("/api/metrics", headers=auth_headers)
+    assert resp.status_code == 200
+    data = resp.json()
+    assert "total_queries" in data
+    assert "zero_hit_rate_pct" in data
+    assert "avg_latency_ms" in data
+
+@patch("backend.main.run_agent_stream")
+def test_chat_agent_sse_endpoint(mock_agent_stream, client, auth_headers, mock_document):
+    # Mock generator stream
+    def mock_gen(*args, **kwargs):
+        yield 'data: {"type": "step", "step": "planning", "message": "Decomposing..."}\n\n'
+        yield 'data: {"type": "token", "text": "Agent answer"}\n\n'
+        yield 'data: {"type": "done"}\n\n'
+        
+    mock_agent_stream.side_effect = mock_gen
+    
+    payload = {
+        "doc_id": mock_document,
+        "question": "Compare refund and payment policies",
+        "mode": "deep"
+    }
+    resp = client.post("/api/chat/agent", json=payload, headers=auth_headers)
+    assert resp.status_code == 200
+    assert "text/event-stream" in resp.headers["content-type"]
+    assert "Decomposing..." in resp.text
+    assert "Agent answer" in resp.text
+
+
