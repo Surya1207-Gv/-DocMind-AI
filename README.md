@@ -34,9 +34,6 @@ Retrieval performance empirically evaluated across 4 document archetypes (**1,20
 - **Proximity Regex Boost (+0.45):** Lifts Definitional queries from 80.0% to **100.0% Recall@4** and improves nDCG@4 from 0.8149 to **0.8917**, dropping Mean Rank from 3.45 to **1.78**.
 - **Score Separation (+0.2315):** In full production, the relevant chunk scores **+0.2315 higher** than the top distractor chunk, ensuring dependable 0.50 threshold filtering.
 
-
-
-
 ---
 
 ## 🤖 LangGraph Multi-Hop Agent Architecture
@@ -95,7 +92,7 @@ DocMind integrates centralized structured telemetry (`backend/logger.py`) loggin
 ```
 
 - **Zero-Hit Rate Monitoring:** Emits proactive warnings whenever zero candidate chunks pass the `0.50` relevance threshold (leading indicator of document retrieval degradation).
-- **Telemetry Endpoint:** Real-time metrics queryable at `GET /api/telemetry`.
+- **Telemetry & Metrics Endpoints:** Real-time metrics queryable at `GET /api/telemetry` and `GET /api/metrics`.
 
 ---
 
@@ -114,7 +111,7 @@ DocMind integrates centralized structured telemetry (`backend/logger.py`) loggin
 - Automatic entity extraction, executive 5-bullet summary, readability complexity classification, proactive smart alerts, and suggested questions on every PDF upload.
 
 ### 4. Enterprise Security & Multi-Tenancy
-- JWT authentication with bcrypt password hashing (12 rounds).
+- JWT authentication with bcrypt password hashing (12 rounds) and fail-fast secret key verification.
 - Per-user data isolation: all SQLite queries and FAISS indices partitioned by `user_id`.
 - Parameterized SQL queries and zero `innerHTML` usage across the frontend.
 
@@ -124,22 +121,23 @@ DocMind integrates centralized structured telemetry (`backend/logger.py`) loggin
 
 | Method | Endpoint | Auth | Purpose |
 |---|---|---|---|
-| `GET` | `/api/health` | No | Health check and server status |
-| `POST` | `/api/auth/register` | No | User registration with email validation |
+| `GET` | `/api/health` | No | Health check, DB, FAISS, and LLM reachability probe |
+| `POST` | `/api/auth/register` | No | User registration with RFC email validation |
 | `POST` | `/api/auth/login` | No | JWT access token authentication |
 | `PUT` | `/api/users/me` | Yes | Update user profile |
 | `GET` | `/api/chats/active` | Yes | List active conversation sessions |
-| `POST` | `/api/upload` | Yes | Upload and process PDF document |
+| `POST` | `/api/upload` | Yes | Upload and process PDF document (with magic-byte validation) |
 | `GET` | `/api/documents` | Yes | List authenticated user documents |
 | `DELETE` | `/api/documents/{doc_id}` | Yes | Delete document and FAISS vector index |
-| `POST` | `/api/chat` | Yes | SSE streaming RAG chat endpoint |
+| `POST` | `/api/chat` | Yes | Fast single-shot SSE streaming RAG chat endpoint |
+| `POST` | `/api/chat/agent` | Yes | LangGraph multi-hop agent reasoning SSE endpoint |
 | `GET` | `/api/chat/history/{doc_id}` | Yes | Retrieve conversation history |
 | `DELETE` | `/api/chat/history/{doc_id}` | Yes | Clear conversation history |
 | `GET` | `/api/analytics/{doc_id}` | Yes | Retrieve background document analytics |
 | `POST` | `/api/quiz/{doc_id}` | Yes | Generate 10-question MCQ assessment |
 | `POST` | `/api/compare` | Yes | Cross-document comparative analysis |
-| `POST` | `/api/agent/query` | Yes | LangGraph multi-hop reasoning query |
-| `GET` | `/api/telemetry` | Yes | Real-time RAG operational metrics |
+| `POST` | `/api/agent/query` | Yes | LangGraph multi-hop agent JSON query |
+| `GET` | `/api/metrics` | Yes | Real-time RAG aggregate operational metrics |
 
 ---
 
@@ -171,17 +169,12 @@ docker-compose up --build
 ## 🧪 Testing & Verification
 
 ```bash
-# Run all 50 backend tests with coverage
+# Run all 62 backend tests with coverage
 python -m pytest backend/tests/ -v --cov=backend
 
 # Run frontend tests (Vitest)
 cd frontend && npm run test
 
-# Run the 45-query retrieval benchmark suite
-python backend/evaluate_retrieval.py
+# Run the 60-query 1,200-chunk retrieval benchmark suite
+python eval/run_eval.py
 ```
-
----
-
-## 📄 License
-MIT License. Created by [Surya G](https://github.com/Surya1207-Gv).

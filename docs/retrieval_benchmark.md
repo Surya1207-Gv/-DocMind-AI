@@ -1,6 +1,6 @@
 # DocMind AI — Empirical Retrieval Benchmark Report (1,200 Chunks)
 
-**Generated:** 2026-08-11 07:31:33 UTC  
+**Generated:** 2026-08-11 07:56:48 UTC  
 **Corpus Size:** **1200 chunks** across 4 distinct document archetypes (top-4 retrieval inspects **0.33%** of corpus)  
 **Evaluation Dataset:** **60 discriminating labeled queries** across 5 categories  
 
@@ -10,13 +10,13 @@
 
 | Retrieval Configuration | nDCG@4 | Mean Rank | Recall@1 | Recall@4 | Recall@10 | Precision@4 | MRR | Score Separation | Zero-Hit % | Latency |
 |---|---|---|---|---|---|---|---|---|---|---|
-| **Config A: Pure Vector (FAISS only)** | 0.8518 | 4.83 | 75.0% | 91.7% | 91.7% | 22.9% | 0.8313 | +0.0188 | 55.0% | 198.86 ms |
-| **Config B: Pure BM25 (Keyword only)** | 0.9486 | 1.15 | 86.7% | 100.0% | 100.0% | 25.0% | 0.9306 | +0.3695 | 0.0% | 207.90 ms |
-| **Config C: Naive Hybrid (60/40, No Boosts)** | 0.9218 | 1.67 | 81.7% | 98.3% | 98.3% | 24.6% | 0.9005 | +0.1694 | 0.0% | 200.67 ms |
-| **Config D: Hybrid + Pattern Boost Only (+0.05)** | 0.9218 | 1.67 | 81.7% | 98.3% | 98.3% | 24.6% | 0.9005 | +0.1788 | 0.0% | 229.06 ms |
-| **Config E: Hybrid + Proximity Regex Only (+0.45)** | 0.9218 | 1.67 | 81.7% | 98.3% | 98.3% | 24.6% | 0.9005 | +0.2474 | 0.0% | 258.69 ms |
-| **Config F: Hybrid + Header Boost Only (+0.10)** | 0.9095 | 1.70 | 78.3% | 98.3% | 98.3% | 24.6% | 0.8839 | +0.2212 | 0.0% | 235.37 ms |
-| **Config G: Full Production System (All Boosts)** | 0.9095 | 1.70 | 78.3% | 98.3% | 98.3% | 24.6% | 0.8839 | +0.2827 | 0.0% | 209.60 ms |
+| **Config A: Pure Vector (FAISS only)** | 0.8518 | 4.83 | 75.0% | 91.7% | 91.7% | 22.9% | 0.8313 | +0.0188 | 55.0% | 701.79 ms |
+| **Config B: Pure BM25 (Keyword only)** | 0.9486 | 1.15 | 86.7% | 100.0% | 100.0% | 25.0% | 0.9306 | +0.3695 | 0.0% | 420.47 ms |
+| **Config C: Naive Hybrid (60/40, No Boosts)** | 0.9218 | 1.67 | 81.7% | 98.3% | 98.3% | 24.6% | 0.9005 | +0.1694 | 0.0% | 438.29 ms |
+| **Config D: Hybrid + Pattern Boost Only (+0.05)** | 0.9218 | 1.67 | 81.7% | 98.3% | 98.3% | 24.6% | 0.9005 | +0.1788 | 0.0% | 400.33 ms |
+| **Config E: Hybrid + Proximity Regex Only (+0.45)** | 0.9218 | 1.67 | 81.7% | 98.3% | 98.3% | 24.6% | 0.9005 | +0.2474 | 0.0% | 437.66 ms |
+| **Config F: Hybrid + Header Boost Only (+0.10)** | 0.9095 | 1.70 | 78.3% | 98.3% | 98.3% | 24.6% | 0.8839 | +0.2212 | 0.0% | 324.30 ms |
+| **Config G: Full Production System (All Boosts)** | 0.9095 | 1.70 | 78.3% | 98.3% | 98.3% | 24.6% | 0.8839 | +0.2827 | 0.0% | 441.62 ms |
 
 ---
 
