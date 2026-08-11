@@ -587,15 +587,18 @@ async def chat_agent_endpoint(request: ChatRequest, current_user: dict = Depends
     """
     Executes LangGraph multi-hop agent reasoning and streams intermediate steps and final answer over SSE.
     """
-    logger.info("[API Chat Agent Stream] User: %s | Query: '%s' | Doc: %s", current_user.get('username'), request.question, request.doc_id)
-    doc = db.get_document(request.doc_id, current_user["id"])
-    if not doc:
-        raise HTTPException(status_code=404, detail="Document not found or unauthorized.")
+    target_doc_ids = request.doc_ids if request.doc_ids else []
+    logger.info("[API Chat Agent Stream] User: %s | Query: '%s' | Docs: %s", current_user.get('username'), request.question, target_doc_ids)
+    for d_id in target_doc_ids:
+        doc = db.get_document(d_id, current_user["id"])
+        if not doc:
+            raise HTTPException(status_code=404, detail=f"Document {d_id} not found or unauthorized.")
         
     return StreamingResponse(
-        run_agent_stream(request.question, [request.doc_id], mode=request.mode),
+        run_agent_stream(request.question, target_doc_ids, mode=request.mode),
         media_type="text/event-stream"
     )
+
 
 @app.get("/api/telemetry")
 def get_telemetry_summary(current_user: dict = Depends(get_current_user)):

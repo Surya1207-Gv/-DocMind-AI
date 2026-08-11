@@ -1,46 +1,55 @@
-# DocMind AI — Empirical Retrieval Benchmark & Evaluation Report
+# DocMind AI — Empirical Retrieval Benchmark Report
 
-**Generated:** 2026-08-11 07:14:59 UTC  
-**Benchmark Scope:** 45 labeled queries across 4 documents (25 ground-truth corpus chunks)
+**Generated:** 2026-08-11 07:25:04 UTC  
+**Corpus Size:** **900 chunks** across 6 technical documents (top-4 retrieves **0.44%** of corpus)  
+**Evaluation Dataset:** **60 ground-truth labeled queries** across 4 stratified categories  
+
+---
 
 ## 1. Primary Configuration Comparison
 
-| Configuration | Recall@1 | Recall@4 | Recall@10 | Precision@4 | MRR | Zero-Hit % | Latency |
-|---|---|---|---|---|---|---|---|
-| **Config A: Pure Vector (FAISS only)** | 80.0% | 97.8% | 100.0% | 24.4% | 0.8852 | 8.9% | 1.96 ms |
-| **Config B: Pure BM25 (Keyword only)** | 91.1% | 100.0% | 100.0% | 25.0% | 0.9519 | 0.0% | 0.83 ms |
-| **Config C: Naive Hybrid (60/40, No Boosts)** | 91.1% | 100.0% | 100.0% | 25.0% | 0.9519 | 0.0% | 0.85 ms |
-| **Config D: DocMind Boosted Hybrid (Production)** | 91.1% | 100.0% | 100.0% | 25.0% | 0.9519 | 0.0% | 1.20 ms |
+| Retrieval Configuration | Recall@1 | Recall@4 | Recall@10 | Precision@4 | MRR | nDCG@4 | Mean Rank | Zero-Hit % | Latency |
+|---|---|---|---|---|---|---|---|---|---|
+| **Config A: Pure Vector (FAISS only)** | 71.7% | 93.3% | 93.3% | 23.3% | 0.8124 | 0.8413 | 7.72 | 55.0% | 121.65 ms |
+| **Config B: Pure BM25 (Keyword only)** | 73.3% | 91.7% | 93.3% | 22.9% | 0.8180 | 0.8391 | 12.50 | 0.0% | 108.89 ms |
+| **Config C: Naive Hybrid (60/40, No Boosts)** | 78.3% | 93.3% | 93.3% | 23.3% | 0.8537 | 0.8714 | 7.20 | 0.0% | 126.31 ms |
+| **Config D: DocMind Boosted Hybrid (Production)** | 75.0% | 95.0% | 96.7% | 23.8% | 0.8391 | 0.8641 | 6.98 | 0.0% | 98.50 ms |
+
+---
 
 ## 2. Recall@4 Breakdown by Query Category
 
-| Category | Pure Vector | Pure BM25 | Naive Hybrid | DocMind Boosted |
+| Query Category | Pure Vector | Pure BM25 | Naive Hybrid (60/40) | DocMind Boosted Hybrid |
 |---|---|---|---|---|
-| Definitional | 100.0% | 100.0% | 100.0% | 100.0% |
-| Keyword/Exact | 100.0% | 100.0% | 100.0% | 100.0% |
-| Conceptual | 100.0% | 100.0% | 100.0% | 100.0% |
-| Multi-Hop/Section | 90.0% | 100.0% | 100.0% | 100.0% |
+| **Definitional** | 100.0% | 100.0% | 100.0% | **100.0%** |
+| **Keyword/Exact** | 100.0% | 100.0% | 100.0% | **100.0%** |
+| **Synonym/Conceptual** | 86.7% | 66.7% | 80.0% | **80.0%** |
+| **Multi-Hop/Comparative** | 86.7% | 100.0% | 93.3% | **100.0%** |
 
-## 3. Boost Ablation Analysis
+---
 
-| Ablation Variant | Recall@1 | Recall@4 | MRR | Mean Score |
+## 3. Boost Component Ablation Study
+
+| Ablation Variant | Recall@1 | Recall@4 | MRR | nDCG@4 |
 |---|---|---|---|---|
-| Base Hybrid (No Boosts) | 91.1% | 100.0% | 0.9519 | 0.4275 |
-| Hybrid + Pattern Boost (+0.05) | 91.1% | 100.0% | 0.9519 | 0.4430 |
-| Hybrid + Proximity Regex (+0.45) | 91.1% | 100.0% | 0.9519 | 0.4439 |
-| Hybrid + Section Header (+0.10) | 91.1% | 100.0% | 0.9519 | 0.4486 |
-| Full DocMind Boost Pipeline | 91.1% | 100.0% | 0.9519 | 0.4739 |
+| **Base Hybrid (No Boosts)** | 78.3% | 93.3% | 0.8537 | 0.8714 |
+| **Hybrid + Pattern Boost (+0.05)** | 78.3% | 93.3% | 0.8537 | 0.8714 |
+| **Hybrid + Proximity Regex (+0.45)** | 78.3% | 93.3% | 0.8537 | 0.8714 |
+| **Hybrid + Section Header (+0.10)** | 75.0% | 95.0% | 0.8391 | 0.8641 |
+| **Full DocMind Boost Pipeline** | 75.0% | 95.0% | 0.8391 | 0.8641 |
+
+---
 
 ## 4. Relevance Threshold Sensitivity Sweep
 
-| Relevance Cutoff Threshold | Recall@4 | Zero-Hit Rate % | Mean Retrieved Score |
-|---|---|---|---|
-| **0.30** | 100.0% | 0.0% | 0.4739 |
-| **0.35** | 100.0% | 0.0% | 0.4739 |
-| **0.40** | 100.0% | 0.0% | 0.4739 |
-| **0.45** | 100.0% | 0.0% | 0.4739 |
-| **0.50** | 100.0% | 0.0% | 0.4739 |
-| **0.55** | 100.0% | 0.0% | 0.4739 |
-| **0.60** | 100.0% | 0.0% | 0.4739 |
-| **0.65** | 100.0% | 0.0% | 0.4739 |
-| **0.70** | 100.0% | 6.7% | 0.4739 |
+| Relevance Cutoff Threshold | Recall@4 | Zero-Hit Rate % |
+|---|---|---|
+| **0.30** | 95.0% | 0.0% |
+| **0.35** | 95.0% | 0.0% |
+| **0.40** | 95.0% | 0.0% |
+| **0.45** | 95.0% | 0.0% |
+| **0.50** | 95.0% | 0.0% |
+| **0.55** | 93.3% | 0.0% |
+| **0.60** | 93.3% | 0.0% |
+| **0.65** | 88.3% | 5.0% |
+| **0.70** | 83.3% | 10.0% |

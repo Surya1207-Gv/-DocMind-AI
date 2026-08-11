@@ -159,7 +159,7 @@ def test_chat_agent_sse_endpoint(mock_agent_stream, client, auth_headers, mock_d
     mock_agent_stream.side_effect = mock_gen
     
     payload = {
-        "doc_id": mock_document,
+        "doc_ids": [mock_document],
         "question": "Compare refund and payment policies",
         "mode": "deep"
     }
@@ -168,5 +168,6 @@ def test_chat_agent_sse_endpoint(mock_agent_stream, client, auth_headers, mock_d
     assert "text/event-stream" in resp.headers["content-type"]
     assert "Decomposing..." in resp.text
     assert "Agent answer" in resp.text
+
 
 
