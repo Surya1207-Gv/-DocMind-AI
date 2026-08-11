@@ -243,9 +243,10 @@ def run_evaluation_harness():
     print(f"Single-Shot Retrieval Recall@4: {single_shot_rec4:.1f}%")
     print(f"LangGraph Multi-Hop Agent Recall@4: {agent_rec4:.1f}% (Delta: {agent_rec4 - single_shot_rec4:+.1f}%)")
 
-    # 5. Identify 10 Worst-Performing Queries
-    query_diagnostics.sort(key=lambda x: (x["rank"] is None, x["rank"] if x["rank"] else 999, -x["score"]), reverse=True)
+    # 5. Identify 10 Worst-Performing Queries (Prioritize failed queries with Rank > 4)
+    query_diagnostics.sort(key=lambda x: (x["rank"] is None or x["rank"] > 4, x["rank"] if x["rank"] else 999, -x["score"]), reverse=True)
     worst_10 = query_diagnostics[:10]
+
 
     # Generate Markdown Report
     os.makedirs(os.path.dirname(REPORT_PATH), exist_ok=True)
