@@ -202,12 +202,18 @@ def verifier_node(state: AgentState) -> Dict[str, Any]:
                 
     pruned_sources = [chunks[i] for i in cited_indices] if cited_indices else chunks
     
-    # 2. Check for refusal / fallback phrases
+    # 2. Check for refusal / fallback phrases or empty response
     fallback_phrases = [
         "cannot find that information", "not found in the uploaded", "do not contain information",
-        "does not contain information", "unable to find", "could not find relevant information"
+        "does not contain information", "unable to find", "could not find relevant information",
+        "could not find sufficient information"
     ]
-    is_refusal = any(p in cleaned_answer.lower() for p in fallback_phrases)
+    is_empty = not cleaned_answer.strip()
+    is_refusal = is_empty or (len(chunks) == 0) or any(p in cleaned_answer.lower() for p in fallback_phrases)
+    
+    if is_empty:
+        cleaned_answer = "I could not find sufficient information to answer your question."
+
     
     confidence = 0 if is_refusal else state.get("confidence", 75)
     confidence_label = "Low" if is_refusal else state.get("confidence_label", "Medium")
