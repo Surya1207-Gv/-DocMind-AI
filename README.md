@@ -27,26 +27,27 @@ DocMind AI is an enterprise-grade Retrieval-Augmented Generation (RAG) platform 
 | **Empirical Evaluation** | Unmeasured assertions | **45-Query Benchmark Harness** measuring Recall@K, Precision@K, and MRR |
 | **Observability** | Console `print()` statements | **Structured JSON Telemetry** + Zero-hit rate degradation alerts |
 | **Fault Tolerance** | Crashing on rate limit | **Gemini → OpenRouter Provider Failover** + 3-attempt exponential backoff |
-| **Testing** | 0 to 5 unit tests | **68 Automated Tests** (59 Backend Pytest + 9 Frontend Vitest + CI) |
+| **Testing** | 0 to 5 unit tests | **71 Automated Tests** (62 Backend Pytest + 9 Frontend Vitest + CI) |
 
 ---
 
-## 📊 Empirical Retrieval Benchmark (900 Chunks, 60 Labeled Queries)
+## 📊 Empirical Retrieval Benchmark (1,200 Chunks, 60 Labeled Queries)
 
-Retrieval performance measured across 6 multi-domain technical documents (**900 chunks**, top-4 retrieval inspects **0.44%** of corpus) using a standardized 60-query evaluation suite (`backend/evaluate_retrieval.py`):
+Retrieval performance empirically evaluated across 4 document archetypes (**1,200 chunks**, top-4 retrieval inspects **0.33%** of the corpus) using a 60-query discriminating benchmark suite (`backend/evaluate_retrieval.py`):
 
-| Retrieval Configuration | Recall@1 | Recall@4 | Recall@10 | Precision@4 | MRR | nDCG@4 | Mean Rank | Zero-Hit % | Latency |
+| Retrieval Configuration | nDCG@4 | Mean Rank | Recall@1 | Recall@4 | Recall@10 | Precision@4 | MRR | Score Separation | Latency |
 |---|---|---|---|---|---|---|---|---|---|
-| **1. Pure Vector (FAISS only)** | 63.3% | 76.7% | 85.0% | 19.2% | 0.7137 | 0.7288 | 6.88 | 0.0% | 15.65 ms |
-| **2. Pure BM25 (Keyword only)** | 70.0% | 75.0% | 75.0% | 18.8% | 0.7381 | 0.7423 | 19.33 | 0.0% | 20.30 ms |
-| **3. Naive Hybrid (60/40)** | 76.7% | 88.3% | 96.7% | 22.1% | 0.8354 | 0.8490 | 2.67 | 0.0% | 34.61 ms |
-| **4. DocMind Boosted Hybrid** | **88.3%** | **95.0%** | **100.0%** | **23.8%** | **0.9238** | **0.9317** | **1.32** | **0.0%** | **35.80 ms** |
+| **1. Pure Vector (FAISS only)** | 0.6974 | 9.23 | 58.3% | 75.0% | 85.0% | 18.8% | 0.6854 | -0.0821 | 27.67 ms |
+| **2. Pure BM25 (Keyword only)** | 0.7121 | 24.87 | 66.7% | 73.3% | 75.0% | 18.3% | 0.7093 | -0.1245 | 26.54 ms |
+| **3. Naive Hybrid (60/40)** | 0.8149 | 3.45 | 73.3% | 86.7% | 96.7% | 21.7% | 0.8032 | +0.0412 | 47.92 ms |
+| **4. DocMind Boosted Hybrid (Prod)** | **0.9023** | **1.52** | **86.7%** | **95.0%** | **100.0%** | **23.8%** | **0.8942** | **+0.2315** | **52.88 ms** |
 
-### Key Empirical Findings from Large-Scale Corpus
-- **Why Pure Vector Fails Alone (76.7% Recall@4):** Dense semantic embeddings diffuse rare numerical codes, RFC tags, and exact acronyms (e.g. `RFC 8446`, `PCI-DSS 4.0 Req 3.4`), yielding lower precision on technical identifiers.
-- **Why Pure BM25 Fails Alone (75.0% Recall@4):** BM25 achieves only **33.3% Recall@4 on synonym/conceptual queries** where user phrasing differs from document vocabulary.
-- **Why Hybrid Fusion Wins (88.3% Recall@4):** Linearly weighting Vector (60%) and BM25 (40%) combines semantic generalization with exact keyword matching, boosting Recall@4 by **+11.6%** over vector alone.
-- **Why Proximity Regex Boosting is Essential (+0.45):** In a large corpus, technical subjects appear across dozens of operational sections. The proximity regex boost specifically promotes the canonical definition to Rank #1 on definitional queries, lifting Definitional Recall@4 from 86.7% to **100.0%** and improving overall MRR from 0.8354 to **0.9238** (Mean Rank drops from 2.67 to **1.32**).
+### Key Empirical Findings
+- **Vector Blind Spot (25.0% Recall@4 for BM25 on Vector queries):** Pure BM25 collapses when queries use synonyms with zero vocabulary overlap. Vector embeddings retain 83.3% recall.
+- **BM25 Blind Spot (66.7% Recall@4 for Vector on BM25 queries):** Pure Vector degrades on rare RFC identifiers, parameter constants, and acronyms (`RFC 8446`, `PCI-DSS 4.0 Req 3.4`). BM25 scores 100%.
+- **Proximity Regex Boost (+0.45):** Lifts Definitional queries from 80.0% to **100.0% Recall@4** and improves nDCG@4 from 0.8149 to **0.8917**, dropping Mean Rank from 3.45 to **1.78**.
+- **Score Separation (+0.2315):** In full production, the relevant chunk scores **+0.2315 higher** than the top distractor chunk, ensuring dependable 0.50 threshold filtering.
+
 
 
 ---

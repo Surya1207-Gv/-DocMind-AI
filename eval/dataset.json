@@ -1,309 +1,337 @@
 {
   "metadata": {
-    "total_corpus_chunks": 900,
+    "total_corpus_chunks": 1200,
     "total_labeled_queries": 60,
-    "documents_count": 6
+    "document_archetypes": [
+      {
+        "name": "Technical_RFC_Specifications.pdf",
+        "description": "Dense Technical Specification, RFC Standards & Protocol Manual",
+        "chunks": 300
+      },
+      {
+        "name": "DeepLearning_Research_Papers.pdf",
+        "description": "Academic & Research Papers (Mathematical Foundations & Deep Learning)",
+        "chunks": 300
+      },
+      {
+        "name": "Basel_III_and_Regulatory_Compliance.pdf",
+        "description": "Legal, Regulatory & Banking Policy Frameworks",
+        "chunks": 300
+      },
+      {
+        "name": "Cloud_Distributed_Systems_Guide.pdf",
+        "description": "Narrative & Explanatory Infrastructure Guide (Cloud & Distributed Systems)",
+        "chunks": 300
+      }
+    ],
+    "categories": [
+      "Vector-Favouring",
+      "BM25-Favouring",
+      "Definitional",
+      "Precision-Stress",
+      "Multi-Hop"
+    ]
   },
   "queries": [
     {
-      "query": "What is Artificial Intelligence?",
+      "query": "strategies for reducing computational overhead during repetitive token generation",
+      "target": "chunk_0306",
+      "category": "Vector-Favouring"
+    },
+    {
+      "query": "preventing catastrophic decay in neural network weights during sequential training",
+      "target": "chunk_0305",
+      "category": "Vector-Favouring"
+    },
+    {
+      "query": "mitigating concurrent thundering connection storms on backend infrastructure",
+      "target": "chunk_0907",
+      "category": "Vector-Favouring"
+    },
+    {
+      "query": "safeguarding confidential payment cardholder numbers in persistent storage",
+      "target": "chunk_0607",
+      "category": "Vector-Favouring"
+    },
+    {
+      "query": "maintaining transactional consistency across independent cluster nodes during commit",
+      "target": "chunk_0905",
+      "category": "Vector-Favouring"
+    },
+    {
+      "query": "restricting malicious automated bot API requests with burst token limiters",
+      "target": "chunk_0910",
+      "category": "Vector-Favouring"
+    },
+    {
+      "query": "recovering lost data and restoring business operations after a catastrophic outage",
+      "target": "chunk_0906",
+      "category": "Vector-Favouring"
+    },
+    {
+      "query": "mitigating LLM fabrications through external verifiable context lookup",
+      "target": "chunk_0310",
+      "category": "Vector-Favouring"
+    },
+    {
+      "query": "preventing cascading dependency outages by isolating degraded downstream services",
+      "target": "chunk_0909",
+      "category": "Vector-Favouring"
+    },
+    {
+      "query": "unidirectional event dispatching from server to browser across persistent HTTP connections",
+      "target": "chunk_0003",
+      "category": "Vector-Favouring"
+    },
+    {
+      "query": "enforcing principle of least privilege permissions in cloud access management",
+      "target": "chunk_0902",
+      "category": "Vector-Favouring"
+    },
+    {
+      "query": "ensuring data subject requests for permanent personal data deletion are honored",
+      "target": "chunk_0610",
+      "category": "Vector-Favouring"
+    },
+    {
+      "query": "RFC 8446 Diffie-Hellman ephemeral key exchanges",
+      "target": "chunk_0001",
+      "category": "BM25-Favouring"
+    },
+    {
+      "query": "RFC 6455 Sec-WebSocket-Key HTTP 101",
+      "target": "chunk_0002",
+      "category": "BM25-Favouring"
+    },
+    {
+      "query": "PRAGMA journal_mode=WAL SQLite concurrent readers",
+      "target": "chunk_0009",
+      "category": "BM25-Favouring"
+    },
+    {
+      "query": "NIST SP 800-207 continuous verification",
+      "target": "chunk_0609",
+      "category": "BM25-Favouring"
+    },
+    {
+      "query": "PCI-DSS 4.0 Requirement 3.4 primary account numbers",
+      "target": "chunk_0607",
+      "category": "BM25-Favouring"
+    },
+    {
+      "query": "FinCEN Suspicious Activity Report $5,000 threshold",
+      "target": "chunk_0606",
+      "category": "BM25-Favouring"
+    },
+    {
+      "query": "FlashAttention SRAM cache softmax tiling",
+      "target": "chunk_0303",
+      "category": "BM25-Favouring"
+    },
+    {
+      "query": "AES-256-GCM authenticated block cipher Galois/Counter Mode",
+      "target": "chunk_0008",
+      "category": "BM25-Favouring"
+    },
+    {
+      "query": "AWS STS AssumeRole AccessKeyId SecretAccessKey",
+      "target": "chunk_0903",
+      "category": "BM25-Favouring"
+    },
+    {
+      "query": "Common Equity Tier 1 CET1 regulatory capital",
+      "target": "chunk_0602",
+      "category": "BM25-Favouring"
+    },
+    {
+      "query": "Net Stable Funding Ratio NSFR available stable funding",
+      "target": "chunk_0605",
+      "category": "BM25-Favouring"
+    },
+    {
+      "query": "Rotary Position Embeddings RoPE orthogonal rotation matrix",
+      "target": "chunk_0302",
+      "category": "BM25-Favouring"
+    },
+    {
+      "query": "What is Transport Layer Security version 1.3?",
       "target": "chunk_0001",
       "category": "Definitional"
     },
     {
-      "query": "Define Machine Learning",
+      "query": "What is the WebSocket protocol?",
       "target": "chunk_0002",
       "category": "Definitional"
     },
     {
-      "query": "What is Supervised Learning?",
+      "query": "What are Server-Sent Events?",
       "target": "chunk_0003",
       "category": "Definitional"
     },
     {
-      "query": "Explain what Unsupervised Learning means",
+      "query": "What is HTTP/3?",
       "target": "chunk_0004",
       "category": "Definitional"
     },
     {
-      "query": "What is Reinforcement Learning?",
+      "query": "What is Write-Ahead Logging?",
       "target": "chunk_0005",
       "category": "Definitional"
     },
     {
-      "query": "What is Retrieval-Augmented Generation?",
+      "query": "What is a B+ Tree?",
       "target": "chunk_0006",
       "category": "Definitional"
     },
     {
-      "query": "What is a Virtual Private Cloud?",
-      "target": "chunk_0151",
+      "query": "What is a Log-Structured Merge-tree?",
+      "target": "chunk_0007",
       "category": "Definitional"
     },
     {
-      "query": "What is Zero Trust Architecture?",
-      "target": "chunk_0301",
+      "query": "What is Rotary Position Embedding?",
+      "target": "chunk_0302",
       "category": "Definitional"
     },
     {
-      "query": "What is Basel III?",
-      "target": "chunk_0451",
+      "query": "What is FlashAttention?",
+      "target": "chunk_0303",
       "category": "Definitional"
     },
     {
-      "query": "What is Write-Ahead Logging?",
-      "target": "chunk_0601",
-      "category": "Definitional"
-    },
-    {
-      "query": "What is an LSM-Tree?",
-      "target": "chunk_0603",
-      "category": "Definitional"
-    },
-    {
-      "query": "What are Server-Sent Events?",
-      "target": "chunk_0751",
+      "query": "What is Mixture of Experts?",
+      "target": "chunk_0304",
       "category": "Definitional"
     },
     {
       "query": "What is Low-Rank Adaptation?",
-      "target": "chunk_0013",
+      "target": "chunk_0307",
       "category": "Definitional"
     },
     {
-      "query": "Define Recovery Time Objective",
-      "target": "chunk_0160",
+      "query": "What is Basel III?",
+      "target": "chunk_0601",
       "category": "Definitional"
     },
     {
       "query": "What is Common Equity Tier 1?",
-      "target": "chunk_0452",
+      "target": "chunk_0602",
       "category": "Definitional"
     },
     {
-      "query": "RFC 8446 Diffie-Hellman ephemeral key exchanges",
+      "query": "What is Zero Trust Architecture?",
+      "target": "chunk_0609",
+      "category": "Definitional"
+    },
+    {
+      "query": "What is a Virtual Private Cloud?",
+      "target": "chunk_0901",
+      "category": "Definitional"
+    },
+    {
+      "query": "Which exact GPU memory hardware does FlashAttention tile within to avoid high bandwidth memory overhead?",
       "target": "chunk_0303",
-      "category": "Keyword/Exact"
+      "category": "Precision-Stress"
     },
     {
-      "query": "NIST SP 800-207 continuous verification",
-      "target": "chunk_0301",
-      "category": "Keyword/Exact"
+      "query": "What is the maximum acceptable duration of system downtime after an outage according to disaster recovery standards?",
+      "target": "chunk_0906",
+      "category": "Precision-Stress"
     },
     {
-      "query": "PCI-DSS 4.0 Requirement 3.4 primary account numbers",
-      "target": "chunk_0459",
-      "category": "Keyword/Exact"
-    },
-    {
-      "query": "ARIES recovery protocol dirty page flushing",
-      "target": "chunk_0601",
-      "category": "Keyword/Exact"
-    },
-    {
-      "query": "RFC 6455 HTTP 101 Switching Protocols",
-      "target": "chunk_0752",
-      "category": "Keyword/Exact"
-    },
-    {
-      "query": "PRAGMA journal_mode=WAL SQLite concurrent readers",
-      "target": "chunk_0609",
-      "category": "Keyword/Exact"
-    },
-    {
-      "query": "HMAC-SHA256 HS256 RS256 token verification",
-      "target": "chunk_0306",
-      "category": "Keyword/Exact"
-    },
-    {
-      "query": "FlashAttention SRAM cache softmax tiling",
-      "target": "chunk_0009",
-      "category": "Keyword/Exact"
-    },
-    {
-      "query": "FIDO2 WebAuthn phishing-resistant hardware keys",
-      "target": "chunk_0315",
-      "category": "Keyword/Exact"
-    },
-    {
-      "query": "FinCEN Suspicious Activity Report $5,000 threshold",
-      "target": "chunk_0457",
-      "category": "Keyword/Exact"
-    },
-    {
-      "query": "Elastic Weight Consolidation Fisher information matrix",
-      "target": "chunk_0011",
-      "category": "Keyword/Exact"
-    },
-    {
-      "query": "AWS STS AssumeRole AccessKeyId SecretAccessKey",
-      "target": "chunk_0153",
-      "category": "Keyword/Exact"
-    },
-    {
-      "query": "Roaring Bitmaps 16-bit container chunks",
-      "target": "chunk_0611",
-      "category": "Keyword/Exact"
-    },
-    {
-      "query": "Boyce-Codd Normal Form BCNF functional dependency",
-      "target": "chunk_0607",
-      "category": "Keyword/Exact"
-    },
-    {
-      "query": "QUIC transport UDP integrated TLS 1.3 independent streams",
-      "target": "chunk_0754",
-      "category": "Keyword/Exact"
-    },
-    {
-      "query": "techniques for preventing catastrophic decay in neural network weights",
-      "target": "chunk_0011",
-      "category": "Synonym/Conceptual"
-    },
-    {
-      "query": "mitigating concurrent thundering connection stampedes on backend databases",
-      "target": "chunk_0162",
-      "category": "Synonym/Conceptual"
-    },
-    {
-      "query": "verifying digital identity without sending plaintext secret credentials across network",
-      "target": "chunk_0315",
-      "category": "Synonym/Conceptual"
-    },
-    {
-      "query": "handling distributed network partition split-brain during leader elections",
-      "target": "chunk_0159",
-      "category": "Synonym/Conceptual"
-    },
-    {
-      "query": "protecting against unauthorized database record reads during concurrent write operations",
+      "query": "How long is the acute severe stress liquidity horizon required for the Liquidity Coverage Ratio buffer?",
       "target": "chunk_0604",
-      "category": "Synonym/Conceptual"
+      "category": "Precision-Stress"
     },
     {
-      "query": "safeguarding confidential payment cardholder numbers in persistent storage",
-      "target": "chunk_0459",
-      "category": "Synonym/Conceptual"
+      "query": "Which exact HTTP upgrade handshake headers are transmitted when initializing a WebSocket connection?",
+      "target": "chunk_0002",
+      "category": "Precision-Stress"
     },
     {
-      "query": "preventing script injection into browser document object model",
-      "target": "chunk_0308",
-      "category": "Synonym/Conceptual"
+      "query": "What is the structural maturity time horizon evaluated by the Net Stable Funding Ratio?",
+      "target": "chunk_0605",
+      "category": "Precision-Stress"
     },
     {
-      "query": "optimizing memory footprint of attention matrices during transformer text generation",
-      "target": "chunk_0012",
-      "category": "Synonym/Conceptual"
+      "query": "Which cryptographic algorithm generates the token signature in HS256 JSON Web Tokens?",
+      "target": "chunk_0010",
+      "category": "Precision-Stress"
     },
     {
-      "query": "measuring worst-case financial losses in abnormal market tail distributions",
-      "target": "chunk_0462",
-      "category": "Synonym/Conceptual"
-    },
-    {
-      "query": "maintaining transactional consistency across independent cluster nodes during commit",
+      "query": "What is the minimum transaction dollar threshold that triggers a FinCEN Suspicious Activity Report filing?",
       "target": "chunk_0606",
-      "category": "Synonym/Conceptual"
+      "category": "Precision-Stress"
     },
     {
-      "query": "streaming server updates to web browsers across persistent unidirectional HTTP channels",
-      "target": "chunk_0751",
-      "category": "Synonym/Conceptual"
+      "query": "Where do all payload data records reside in a balanced B+ Tree index data structure?",
+      "target": "chunk_0006",
+      "category": "Precision-Stress"
     },
     {
-      "query": "securing cloud infrastructure by enforcing principle of least privilege permissions",
-      "target": "chunk_0152",
-      "category": "Synonym/Conceptual"
-    },
-    {
-      "query": "restricting malicious automated bot API requests with leaky rate limiters",
-      "target": "chunk_0756",
-      "category": "Synonym/Conceptual"
-    },
-    {
-      "query": "recovering lost data and restoring business operations after a catastrophic outage",
-      "target": "chunk_0160",
-      "category": "Synonym/Conceptual"
-    },
-    {
-      "query": "mitigating LLM fabrications through external verifiable context lookup",
-      "target": "chunk_0015",
-      "category": "Synonym/Conceptual"
-    },
-    {
-      "query": "How does Zero Trust security compare with AWS IAM policies in access control?",
-      "target": "chunk_0301",
-      "category": "Multi-Hop/Comparative"
-    },
-    {
-      "query": "How does Recovery Time Objective impact cross-region database replication design?",
-      "target": "chunk_0160",
-      "category": "Multi-Hop/Comparative"
-    },
-    {
-      "query": "How do B+ Tree internal page splits compare with LSM-Tree SSTable background compactions?",
-      "target": "chunk_0602",
-      "category": "Multi-Hop/Comparative"
-    },
-    {
-      "query": "Compare Server-Sent Events with WebSocket protocol for real-time web applications",
-      "target": "chunk_0751",
-      "category": "Multi-Hop/Comparative"
-    },
-    {
-      "query": "How does Common Equity Tier 1 capital absorb losses compared with Tier 2 capital under Basel III?",
-      "target": "chunk_0452",
-      "category": "Multi-Hop/Comparative"
-    },
-    {
-      "query": "How does FlashAttention kernel tiling improve on traditional multi-head self-attention?",
+      "query": "Which specific auxiliary file is appended to during concurrent SQLite WAL transactions?",
       "target": "chunk_0009",
-      "category": "Multi-Hop/Comparative"
+      "category": "Precision-Stress"
     },
     {
-      "query": "What are the trade-offs between SOC 2 Type 1 and Type 2 compliance audit windows?",
-      "target": "chunk_0311",
-      "category": "Multi-Hop/Comparative"
+      "query": "Under GDPR Article 17, what is the official legal term for the right to data deletion?",
+      "target": "chunk_0610",
+      "category": "Precision-Stress"
     },
     {
-      "query": "How does SQLite WAL mode prevent reader blocking compared with traditional rollback journals?",
+      "query": "How does Zero Trust Architecture compare with AWS IAM policies in access control enforcement?",
       "target": "chunk_0609",
-      "category": "Multi-Hop/Comparative"
+      "category": "Multi-Hop"
     },
     {
-      "query": "How does S3 Glacier Deep Archive access latency compare with S3 Standard storage?",
-      "target": "chunk_0154",
-      "category": "Multi-Hop/Comparative"
+      "query": "How does Server-Sent Events compare with WebSocket RFC 6455 in duplex communication capabilities?",
+      "target": "chunk_0003",
+      "category": "Multi-Hop"
     },
     {
-      "query": "Compare symmetric AES-256 block encryption with asymmetric FIDO2 public key authentication",
-      "target": "chunk_0302",
-      "category": "Multi-Hop/Comparative"
+      "query": "Compare B+ Tree leaf page splits with LSM-Tree SSTable background compaction mechanics.",
+      "target": "chunk_0006",
+      "category": "Multi-Hop"
     },
     {
-      "query": "How does Parameter-Efficient Fine-Tuning with LoRA compare with Full Fine-Tuning in memory usage?",
-      "target": "chunk_0013",
-      "category": "Multi-Hop/Comparative"
+      "query": "How does Recovery Time Objective compare with Recovery Point Objective in disaster recovery planning?",
+      "target": "chunk_0906",
+      "category": "Multi-Hop"
     },
     {
-      "query": "How does Liquidity Coverage Ratio buffer requirements compare with Net Stable Funding Ratio?",
-      "target": "chunk_0454",
-      "category": "Multi-Hop/Comparative"
+      "query": "Compare Common Equity Tier 1 capital with Liquidity Coverage Ratio in banking risk management.",
+      "target": "chunk_0602",
+      "category": "Multi-Hop"
     },
     {
-      "query": "How does HTTP/3 QUIC independent stream loss recovery compare with HTTP/2 TCP head-of-line blocking?",
-      "target": "chunk_0754",
-      "category": "Multi-Hop/Comparative"
+      "query": "How does FlashAttention SRAM memory tiling compare with KV cache optimization in transformer inference?",
+      "target": "chunk_0303",
+      "category": "Multi-Hop"
     },
     {
-      "query": "How does Multi-Version Concurrency Control compare with Strict Two-Phase Locking in write contention?",
-      "target": "chunk_0604",
-      "category": "Multi-Hop/Comparative"
+      "query": "Compare TLS 1.3 Diffie-Hellman handshake round trips with HTTP/3 QUIC connection migration.",
+      "target": "chunk_0001",
+      "category": "Multi-Hop"
     },
     {
-      "query": "How does automated real-time transaction risk scoring interact with AML Suspicious Activity Reports?",
-      "target": "chunk_0460",
-      "category": "Multi-Hop/Comparative"
+      "query": "How does Parameter-Efficient Fine-Tuning with LoRA compare with Elastic Weight Consolidation in preventing catastrophic forgetting?",
+      "target": "chunk_0307",
+      "category": "Multi-Hop"
+    },
+    {
+      "query": "Compare SOC 2 Type 1 point-in-time design evaluations with SOC 2 Type 2 operating effectiveness audits.",
+      "target": "chunk_0608",
+      "category": "Multi-Hop"
+    },
+    {
+      "query": "How does SQLite WAL append concurrency compare with Write-Ahead Logging ARIES crash recovery?",
+      "target": "chunk_0009",
+      "category": "Multi-Hop"
+    },
+    {
+      "query": "Compare Redis Redlock distributed lease consensus with Raft leader election commitment invariants.",
+      "target": "chunk_0908",
+      "category": "Multi-Hop"
     }
   ]
 }

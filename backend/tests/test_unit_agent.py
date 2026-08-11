@@ -144,3 +144,55 @@ def test_run_agent_stream_generator_events(mock_get_llm, mock_search):
     assert "retrieving" in step_names
     assert "synthesizing" in step_names
     assert "verifying" in step_names
+
+@patch("backend.agent_engine.search_index")
+def test_retriever_node_deduplication(mock_search):
+    from langchain_core.documents import Document
+    doc1 = Document(page_content="Common chunk", metadata={"page": 1, "doc_id": "d1", "doc_name": "test.pdf"})
+    doc2 = Document(page_content="Distinct chunk", metadata={"page": 2, "doc_id": "d1", "doc_name": "test.pdf"})
+    # Both sub-queries return doc1, but second also returns doc2
+    mock_search.side_effect = [
+        [(doc1, 0.3)],
+        [(doc1, 0.3), (doc2, 0.4)]
+    ]
+    
+    state = {
+        "sub_queries": ["sub1", "sub2"],
+        "doc_ids": ["d1"],
+        "mode": "deep"
+    }
+    res = retriever_node(state)
+    assert len(res["retrieved_chunks"]) == 2
+    contents = [c["text"] for c in res["retrieved_chunks"]]
+    assert "Common chunk" in contents
+    assert "Distinct chunk" in contents
+
+@patch("backend.agent_engine.get_llm_model")
+def test_synthesizer_node_combines_context(mock_get_llm):
+    mock_llm_inst = MagicMock()
+    mock_llm_inst.invoke.return_value = AIMessage(content="Grounded synthesis.\nCited Source Indices: 0")
+    mock_get_llm.return_value = mock_llm_inst
+    
+    state = {
+        "original_query": "What is the policy?",
+        "sub_queries": ["What is the policy?"],
+        "retrieved_chunks": [
+            {"text": "Policy clause 1.", "doc_name": "p.pdf", "page": 1, "relevance": 0.8}
+        ],
+        "mode": "qa"
+    }
+    res = synthesizer_node(state)
+    assert "draft_answer" in res
+    assert "Grounded synthesis" in res["draft_answer"]
+
+def test_verifier_node_empty_draft_fallback():
+    state = {
+        "draft_answer": "",
+        "retrieved_chunks": [],
+        "confidence": 0,
+        "confidence_label": "Low"
+    }
+    res = verifier_node(state)
+    assert res["verification_status"]["grounded"] is False
+    assert res["verified_answer"] == "I could not find sufficient information to answer your question."
+
