@@ -6,7 +6,13 @@ from typing import List, Dict, Any, Tuple
 from langchain_community.vectorstores import FAISS
 import requests
 from langchain_core.embeddings import Embeddings
-from backend.config import OPENROUTER_API_KEY, EMBEDDING_MODEL, FAISS_DIR
+from backend.config import (
+    OPENROUTER_API_KEY,
+    EMBEDDING_MODEL,
+    FAISS_DIR,
+    RELEVANCE_THRESHOLD,
+    VECTOR_WEIGHT,
+)
 from backend.logger import get_logger, log_rag_retrieval_event
 
 logger = get_logger(__name__)
@@ -213,13 +219,16 @@ def search_index(
     boost_def_pattern: bool = True,
     boost_proximity: bool = True,
     boost_header: bool = True,
-    relevance_threshold: float = 0.50,
+    relevance_threshold: float = None,
 ) -> List[Tuple[Any, float]]:
     """
     Searches across specified doc_ids by loading and merging their FAISS indices.
     Retrieves candidates, re-ranks them using BM25 hybrid search, and returns top results.
     Optional flags allow empirical IR evaluation and ablation sweeps without altering production defaults.
     """
+    if relevance_threshold is None:
+        relevance_threshold = RELEVANCE_THRESHOLD
+
     embeddings = get_embeddings_model()
     
     # Identify which doc IDs to load
@@ -304,7 +313,7 @@ def search_index(
         
         # Compute base score depending on active retrieval components
         if use_vector and use_bm25:
-            hybrid_score = 0.6 * vector_sim + 0.4 * bm25_normalized
+            hybrid_score = VECTOR_WEIGHT * vector_sim + (1.0 - VECTOR_WEIGHT) * bm25_normalized
         elif use_vector and not use_bm25:
             hybrid_score = vector_sim
         elif not use_vector and use_bm25:

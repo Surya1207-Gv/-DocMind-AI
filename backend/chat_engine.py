@@ -1,6 +1,7 @@
 import os
 import json
 import re
+import time
 import uuid
 from datetime import datetime
 from typing import List, Dict, Any, Tuple, Optional, Callable
@@ -255,6 +256,7 @@ def run_chat_stream(request: ChatRequest, user_id: str):
     confidence_label = "Low"
     full_answer = ""
     prefix_note = ""
+    retrieval_ms = None      # populated only on the retrieval path
     
     if cls_type == "CONVERSATIONAL":
         system_prompt = (
@@ -358,7 +360,9 @@ def run_chat_stream(request: ChatRequest, user_id: str):
             mode_top_k = 5  # default/eli5
 
         # Search vector DB with BM25 hybrid ranking re-scoring
+        _t_retrieval = time.perf_counter()
         search_results = search_index(normalized_q, request.doc_ids, top_k=mode_top_k)
+        retrieval_ms = round((time.perf_counter() - _t_retrieval) * 1000.0, 1)
         
         prefix_note = ""
         if cls_type == "TYPO" and normalized_q.strip().lower() != request.question.strip().lower():
@@ -468,7 +472,12 @@ def run_chat_stream(request: ChatRequest, user_id: str):
         "confidence": confidence,
         "confidence_label": confidence_label,
         "sources": [s.dict() for s in sources],
-        "mode": request.mode
+        "mode": request.mode,
+        # Observability for the UI: what was actually retrieved, how long the
+        # retrieval stage took, and which model answered. Never any credentials.
+        "retrieved_count": len(sources),
+        "retrieval_ms": retrieval_ms,
+        "model": LLM_MODEL,
     }
     yield f"data: {json.dumps(metadata_event)}\n\n"
     

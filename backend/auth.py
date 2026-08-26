@@ -17,8 +17,10 @@ load_dotenv(os.path.join(BASE_DIR, ".env"))
 SECRET_KEY = os.getenv("JWT_SECRET_KEY")
 if not SECRET_KEY:
     raise RuntimeError(
-        "CRITICAL SECURITY CONFIGURATION ERROR: JWT_SECRET_KEY environment variable is not set. "
-        "Define JWT_SECRET_KEY in backend/.env before running DocMind AI."
+        "CONFIGURATION ERROR: JWT_SECRET_KEY is not set, so auth tokens cannot be signed.\n"
+        "  Local development : add JWT_SECRET_KEY to backend/.env (copy .env.example).\n"
+        "  Cloud deployment  : set JWT_SECRET_KEY as an environment variable on your host.\n"
+        "  Generate a value  : python -c \"import secrets; print(secrets.token_hex(32))\""
     )
 ALGORITHM = "HS256"
 ACCESS_TOKEN_EXPIRE_MINUTES = 1440  # 24 hours

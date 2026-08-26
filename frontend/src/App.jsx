@@ -6,7 +6,7 @@ import QuizPanel from "./components/QuizPanel";
 import CompareMode from "./components/CompareMode";
 import ParticleBackground from "./components/ParticleBackground";
 import LandingPage from "./components/LandingPage";
-import { documentApi, chatApi, authApi } from "./api";
+import { documentApi, chatApi, authApi, API_BASE, DEMO_CREDENTIALS } from "./api";
 import ProfileSection from "./components/ProfileSection";
 import "./App.css"; // Auth-specific styling overrides
 
@@ -286,6 +286,35 @@ export default function App() {
   }, [activeDocId, token]);
 
   // Auth Action Handlers
+  // One-click access for reviewers: signs in to the pre-seeded demo account so
+  // the deployed URL is explorable without creating an account first.
+  const handleDemoLogin = async () => {
+    setAuthError("");
+    setAuthLoading(true);
+    try {
+      const data = await authApi.login(DEMO_CREDENTIALS.username, DEMO_CREDENTIALS.password);
+      localStorage.setItem("token", data.access_token);
+      localStorage.setItem("username", data.username);
+      localStorage.setItem("email", data.email || "");
+      localStorage.setItem("fullName", data.full_name || "");
+      setToken(data.access_token);
+      setUsername(data.username);
+      setEmail(data.email || "");
+      setFullName(data.full_name || "");
+      setView("app");
+      addToast("Signed in to the demo account.", "success");
+    } catch (err) {
+      setAuthError(
+        err.response?.data?.detail ||
+          "Demo account unavailable. Create an account to continue."
+      );
+      setIsLoginView(true);
+      setView("auth");
+    } finally {
+      setAuthLoading(false);
+    }
+  };
+
   const handleAuthSubmit = async (e) => {
     e.preventDefault();
     
@@ -500,7 +529,7 @@ export default function App() {
       }));
 
       // Request stream directly from backend main.py endpoint
-      const response = await fetch("http://localhost:8000/api/chat", {
+      const response = await fetch(`${API_BASE}/chat`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -555,6 +584,10 @@ export default function App() {
                     confidence: parsed.confidence,
                     confidence_label: parsed.confidence_label,
                     sources: parsed.sources,
+                    // Retrieval telemetry (undefined on non-RAG turns)
+                    retrieved_count: parsed.retrieved_count,
+                    retrieval_ms: parsed.retrieval_ms,
+                    model: parsed.model,
                     content: parsed.content !== undefined ? parsed.content : historyCopy[idx].content,
                   };
                   return { ...prev, [activeDocId]: historyCopy };
@@ -618,6 +651,8 @@ export default function App() {
       <LandingPage
         onLogin={() => { setIsLoginView(true); setView("auth"); }}
         onSignup={() => { setIsLoginView(false); setView("auth"); }}
+        onDemo={handleDemoLogin}
+        demoLoading={authLoading}
       />
     );
   }

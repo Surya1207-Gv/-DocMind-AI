@@ -76,9 +76,29 @@ export default function MessageBubble({ message }) {
 
         {!isUser && !message.generating && message.sources && message.sources.length > 0 && (
           <div className="message-sources">
+            <div className="message-sources-label">
+              Retrieved context &mdash; the answer above was generated only from these passages
+            </div>
             {message.sources.map((source, idx) => (
               <SourceCard key={idx} source={source} />
             ))}
+          </div>
+        )}
+
+        {/* Retrieval telemetry: makes the RAG pipeline observable in the UI. */}
+        {!isUser && !message.generating && message.retrieved_count !== undefined && (
+          <div className="message-telemetry">
+            <span title="Chunks that passed the relevance threshold and were sent to the model">
+              {message.retrieved_count} chunk{message.retrieved_count === 1 ? "" : "s"} retrieved
+            </span>
+            {message.retrieval_ms != null && (
+              <span title="Time spent on hybrid vector + BM25 retrieval">
+                {message.retrieval_ms} ms retrieval
+              </span>
+            )}
+            {message.model && (
+              <span title="Model that generated the answer">{message.model}</span>
+            )}
           </div>
         )}
 

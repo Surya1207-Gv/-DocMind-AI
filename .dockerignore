@@ -1,5 +1,16 @@
+# Keep the build context small and secret-free.
+
+# Secrets
+.env
+.env.*
+!.env.example
+backend/.env
+
+# VCS & CI
 .git
 .github
+
+# Python
 __pycache__
 *.pyc
 *.pyo
@@ -7,9 +18,29 @@ __pycache__
 .pytest_cache
 .coverage
 coverage.xml
-node_modules
-dist
-.env
+htmlcov
 backend/venv
-backend/__pycache__
+venv
+.venv
+
+# Node / build output (the image builds the SPA itself in stage 1)
+node_modules
+frontend/node_modules
+frontend/dist
+dist
+
+# Runtime state - never bake user data or indices into an image
+backend/uploads
+backend/faiss_indices
+backend/docmind.db*
+backend/metadata*.json
+data
 *.log
+
+# Docs & dev-only material
+*.md
+!README.md
+docs
+eval
+postman
+scripts/dev

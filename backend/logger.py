@@ -18,7 +18,9 @@ from typing import Dict, Any, Optional
 from logging.handlers import RotatingFileHandler
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-LOG_FILE = os.path.join(BASE_DIR, "docmind.log")
+# Keep logs beside the rest of the runtime state so a mounted volume captures them.
+LOG_DIR = os.getenv("DATA_DIR") or BASE_DIR
+LOG_FILE = os.path.join(LOG_DIR, "docmind.log")
 
 LOG_LEVEL = os.getenv("LOG_LEVEL", "INFO").upper()
 

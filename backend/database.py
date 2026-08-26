@@ -3,8 +3,10 @@ import sqlite3
 import json
 from typing import List, Dict, Any, Optional
 
-BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-DB_FILE = os.path.join(BASE_DIR, "docmind.db")
+from backend.config import BASE_DIR, DB_FILE
+
+# Ensure the parent directory exists (DB_FILE may live on a mounted volume).
+os.makedirs(os.path.dirname(DB_FILE) or ".", exist_ok=True)
 
 def get_db_connection():
     conn = sqlite3.connect(DB_FILE, check_same_thread=False)

@@ -44,7 +44,17 @@ const FEATURES = [
   },
 ];
 
-export default function LandingPage({ onLogin, onSignup }) {
+// Shown on the landing page so the engineering is legible at a glance, not
+// just the product features.
+const PIPELINE = [
+  { step: "Ingest", detail: "PDF text extracted page by page, then split into 1000-character chunks with 150 characters of overlap." },
+  { step: "Embed", detail: "Each chunk is embedded with text-embedding-3-small and stored in a per-document FAISS index." },
+  { step: "Retrieve", detail: "Hybrid search: dense vectors for meaning, BM25 for exact terms, blended 0.6 / 0.4 and re-ranked." },
+  { step: "Ground", detail: "Chunks scoring below the relevance threshold are dropped, so the model can answer “not in the document”." },
+  { step: "Generate", detail: "Top-k passages become the prompt context; the answer streams back with page-level citations." },
+];
+
+export default function LandingPage({ onLogin, onSignup, onDemo, demoLoading }) {
   const heroRef = useRef(null);
 
   useEffect(() => {
@@ -89,13 +99,24 @@ export default function LandingPage({ onLogin, onSignup }) {
           interactive quizzes, and multi-document comparison — all powered by advanced AI and smart search.
         </p>
         <div className="lp-hero-cta">
-          <button className="lp-btn-primary lp-btn-lg" onClick={onSignup}>
-            Start for Free →
+          <button
+            className="lp-btn-primary lp-btn-lg"
+            onClick={onDemo}
+            disabled={demoLoading}
+          >
+            {demoLoading ? "Opening demo…" : "Try the live demo →"}
+          </button>
+          <button className="lp-btn-ghost lp-btn-lg" onClick={onSignup}>
+            Create Account
           </button>
           <button className="lp-btn-ghost lp-btn-lg" onClick={onLogin}>
             Sign In
           </button>
         </div>
+        <p className="lp-hero-note">
+          The demo signs you in to a shared account with a sample document already
+          indexed — no signup, no API key needed.
+        </p>
       </section>
 
       {/* FEATURES GRID */}
@@ -139,14 +160,45 @@ export default function LandingPage({ onLogin, onSignup }) {
         </div>
       </section>
 
+      {/* UNDER THE HOOD - RAG PIPELINE */}
+      <section className="lp-section">
+        <div className="lp-section-tag lp-fade-up">Under the Hood</div>
+        <h2 className="lp-section-title lp-fade-up">A retrieval-augmented generation pipeline</h2>
+        <p className="lp-section-sub lp-fade-up">
+          Answers are grounded in your documents, not in the model&rsquo;s memory.
+          Every stage below runs on each question you ask.
+        </p>
+        <ol className="lp-pipeline">
+          {PIPELINE.map((p, i) => (
+            <li className="lp-pipeline-item lp-fade-up" key={p.step}>
+              <span className="lp-pipeline-index">{i + 1}</span>
+              <div>
+                <div className="lp-pipeline-step">{p.step}</div>
+                <div className="lp-pipeline-detail">{p.detail}</div>
+              </div>
+            </li>
+          ))}
+        </ol>
+        <div className="lp-stack lp-fade-up">
+          {["FastAPI", "React", "FAISS", "BM25 hybrid re-rank", "LangGraph agent", "SQLite", "JWT auth", "Docker"].map((t) => (
+            <span className="lp-stack-chip" key={t}>{t}</span>
+          ))}
+        </div>
+      </section>
+
       {/* CTA BANNER */}
       <section className="lp-cta-banner lp-fade-up">
         <div className="lp-cta-glow" />
         <h2 className="lp-cta-title">Ready to chat with your documents?</h2>
         <p className="lp-cta-sub">Create a free account and upload your first PDF in under a minute.</p>
-        <button className="lp-btn-primary lp-btn-lg" onClick={onSignup}>
-          Create Free Account →
-        </button>
+        <div className="lp-hero-cta">
+          <button className="lp-btn-primary lp-btn-lg" onClick={onDemo} disabled={demoLoading}>
+            {demoLoading ? "Opening demo…" : "Try the live demo →"}
+          </button>
+          <button className="lp-btn-ghost lp-btn-lg" onClick={onSignup}>
+            Create Free Account
+          </button>
+        </div>
       </section>
 
       <footer className="lp-footer">

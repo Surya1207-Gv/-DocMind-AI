@@ -1,6 +1,19 @@
 import axios from "axios";
 
-const API_BASE = "http://localhost:8000/api";
+// Same-origin by default: in production FastAPI serves this SPA and the API from
+// one host, and in dev Vite proxies /api -> localhost:8000 (see vite.config.js).
+// Set VITE_API_BASE_URL only when the API lives on a different origin.
+export const API_BASE = import.meta.env.VITE_API_BASE_URL
+  ? `${import.meta.env.VITE_API_BASE_URL.replace(/\/+$/, "")}/api`
+  : "/api";
+
+// Credentials for the read-only demo account seeded on the server when
+// DEMO_SEED is enabled. Public by design: it exists so a reviewer can explore
+// the deployment without signing up. Never reuse these for a real account.
+export const DEMO_CREDENTIALS = {
+  username: import.meta.env.VITE_DEMO_USERNAME || "demo",
+  password: import.meta.env.VITE_DEMO_PASSWORD || "demo1234",
+};
 
 const api = axios.create({
   baseURL: API_BASE,

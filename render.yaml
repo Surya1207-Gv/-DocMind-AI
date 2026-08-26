@@ -1,0 +1,69 @@
+# =============================================================================
+# Render Blueprint — DocMind AI
+# =============================================================================
+# One Docker web service serving both the REST API and the React SPA.
+# Deploy: push to GitHub, then Render Dashboard -> New -> Blueprint -> pick repo.
+# Secrets are marked sync:false so Render prompts for them instead of storing
+# them in git.
+# =============================================================================
+services:
+  - type: web
+    name: docmind-ai
+    runtime: docker
+    plan: free
+    dockerfilePath: ./Dockerfile
+    dockerContext: .
+    region: oregon
+    healthCheckPath: /api/health
+    autoDeploy: true
+    envVars:
+      # --- Secrets: entered in the Render dashboard, never committed ---
+      - key: OPENROUTER_API_KEY
+        sync: false
+      - key: GEMINI_API_KEY
+        sync: false
+      # Render generates a strong random value on first deploy.
+      - key: JWT_SECRET_KEY
+        generateValue: true
+
+      # --- Runtime configuration ---
+      # The SPA is same-origin, so no cross-origin allowlist is needed.
+      - key: ALLOWED_ORIGINS
+        value: ""
+      - key: DATA_DIR
+        value: /data
+      - key: FRONTEND_DIST_DIR
+        value: /app/frontend/dist
+      - key: LOG_LEVEL
+        value: INFO
+
+      # --- RAG tuning (safe to change without a code edit) ---
+      - key: TOP_K
+        value: "8"
+      - key: CHUNK_SIZE
+        value: "1000"
+      - key: CHUNK_OVERLAP
+        value: "150"
+      - key: RELEVANCE_THRESHOLD
+        value: "0.5"
+      - key: MAX_UPLOAD_MB
+        value: "25"
+
+      # --- Demo seeding ---
+      # The free plan has no persistent disk, so state resets when the instance
+      # sleeps. Seeding indexes a bundled PDF on boot so the demo is never blank.
+      - key: DEMO_SEED
+        value: "true"
+      - key: DEMO_USERNAME
+        value: demo
+      - key: DEMO_PASSWORD
+        sync: false
+
+    # ---------------------------------------------------------------------
+    # OPTIONAL — paid plans only. Uncomment (and switch plan to `starter`) to
+    # make uploads, indices and chat history survive restarts.
+    # disk:
+    #   name: docmind-data
+    #   mountPath: /data
+    #   sizeGB: 1
+    # ---------------------------------------------------------------------

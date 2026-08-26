@@ -3,6 +3,7 @@ import re
 import json
 import shutil
 import uuid
+import secrets
 from datetime import datetime
 from typing import List, Dict, Any, Optional
 from fastapi import FastAPI, UploadFile, File, HTTPException, BackgroundTasks, Depends, Request, status
@@ -11,7 +12,17 @@ from fastapi.responses import StreamingResponse, JSONResponse
 from pydantic import BaseModel
 
 
-from backend.config import UPLOAD_DIR, BASE_DIR
+from backend.config import (
+    UPLOAD_DIR,
+    BASE_DIR,
+    FRONTEND_DIST_DIR,
+    LLM_MODEL,
+    EMBEDDING_MODEL,
+    TOP_K,
+    MAX_UPLOAD_BYTES,
+    MAX_UPLOAD_MB,
+    DEMO_SEED,
+)
 from backend.models import (
     ChatRequest, ChatResponse, DocumentInfo, DocumentAnalytics, 
     QuizResponse, CompareRequest, CompareResponse,
@@ -85,9 +96,19 @@ def migrate_metadata_json():
     admin = db.get_user_by_username("admin")
     admin_id = "default_admin_id"
     if not admin:
-        # Default password is "admin123"
-        hashed = hash_password("admin123")
-        db.create_user(admin_id, "admin", hashed)
+        # This account exists to own documents migrated from the legacy
+        # metadata.json. It must never ship with a guessable password: on a
+        # public deployment that would be an open door. If ADMIN_PASSWORD is not
+        # supplied, the account gets an unguessable random secret and is simply
+        # not log-in-able, which is the safe default.
+        admin_password = os.getenv("ADMIN_PASSWORD")
+        if not admin_password:
+            admin_password = secrets.token_urlsafe(32)
+            logger.info(
+                "[Startup] Created 'admin' record with a random password "
+                "(set ADMIN_PASSWORD to enable logging in as admin)."
+            )
+        db.create_user(admin_id, "admin", hash_password(admin_password))
     else:
         admin_id = admin["id"]
         
@@ -136,6 +157,25 @@ def migrate_metadata_json():
 
 migrate_metadata_json()
 
+
+# --- Optional demo seeding ---------------------------------------------------
+@app.on_event("startup")
+def seed_demo_on_startup():
+    """
+    On free hosting the disk is ephemeral, so a restart leaves the app empty.
+    When DEMO_SEED=true, index a bundled sample PDF in a background thread so
+    boot is never blocked by embedding API calls (and never fails because of them).
+    """
+    if not DEMO_SEED:
+        return
+
+    import threading
+
+    from backend.demo_seed import seed_demo_document
+
+    threading.Thread(target=seed_demo_document, name="demo-seed", daemon=True).start()
+
+
 # --- Health Check ---
 @app.get("/api/health")
 def health_check():
@@ -161,13 +201,17 @@ def health_check():
     }
 
 
-@app.get("/")
-def read_root():
+@app.get("/api/info")
+def api_info():
+    """Machine-readable service descriptor (the SPA is served from '/')."""
     return {
-        "message": "Welcome to DocMind API.",
-        "web_interface": "http://localhost:5173",
+        "name": "DocMind AI",
+        "description": "Hybrid-retrieval RAG over your PDFs, with citations.",
         "api_docs": "/docs",
-        "health_check": "/api/health"
+        "health_check": "/api/health",
+        "llm_model": LLM_MODEL,
+        "embedding_model": EMBEDDING_MODEL,
+        "top_k": TOP_K,
     }
 
 # --- Auth Routes ---
@@ -340,7 +384,20 @@ async def upload_document(
         raise HTTPException(status_code=500, detail=f"Failed to save file: {str(e)}")
         
     file_size = os.path.getsize(file_path)
-    
+
+    # Reject oversized uploads after the write so we never hold a large body in
+    # memory; the partial file is removed immediately.
+    if file_size > MAX_UPLOAD_BYTES:
+        os.remove(file_path)
+        raise HTTPException(
+            status_code=413,
+            detail=f"File is {file_size / 1024 / 1024:.1f} MB. Maximum allowed size is {MAX_UPLOAD_MB} MB.",
+        )
+
+    if file_size == 0:
+        os.remove(file_path)
+        raise HTTPException(status_code=400, detail="Uploaded file is empty.")
+
     try:
         # Extract and chunk text
         chunks = process_pdf(file_path, file.filename, doc_id)
@@ -461,6 +518,11 @@ def delete_document(doc_id: str, current_user: dict = Depends(get_current_user))
 @app.post("/api/chat")
 def chat_document(request: ChatRequest, current_user: dict = Depends(get_current_user)):
     logger.info("[API Chat] User: %s | Query: '%s' | Docs: %s", current_user.get('username'), request.question, request.doc_ids)
+
+    # Reject blank questions before spending a retrieval + LLM round trip.
+    if not request.question or not request.question.strip():
+        raise HTTPException(status_code=400, detail="Question cannot be empty.")
+
     # Verify ownership of target documents
     for doc_id in request.doc_ids:
         doc = db.get_document(doc_id, current_user["id"])
@@ -563,6 +625,9 @@ def agent_query_endpoint(request: AgentQueryRequest, current_user: dict = Depend
     fact-verification using the LangGraph state graph.
     """
     logger.info("[API Agent Query] User: %s | Query: '%s' | Docs: %s", current_user.get('username'), request.question, request.doc_ids)
+
+    if not request.question or not request.question.strip():
+        raise HTTPException(status_code=400, detail="Question cannot be empty.")
     for doc_id in request.doc_ids:
         doc = db.get_document(doc_id, current_user["id"])
         if not doc:
@@ -589,6 +654,10 @@ async def chat_agent_endpoint(request: ChatRequest, current_user: dict = Depends
     """
     target_doc_ids = request.doc_ids if request.doc_ids else []
     logger.info("[API Chat Agent Stream] User: %s | Query: '%s' | Docs: %s", current_user.get('username'), request.question, target_doc_ids)
+
+    if not request.question or not request.question.strip():
+        raise HTTPException(status_code=400, detail="Question cannot be empty.")
+
     for d_id in target_doc_ids:
         doc = db.get_document(d_id, current_user["id"])
         if not doc:
@@ -616,3 +685,45 @@ def get_metrics_summary(current_user: dict = Depends(get_current_user)):
     return telemetry.get_summary()
 
 
+
+
+# ---------------------------------------------------------------------------
+# Static SPA hosting
+# ---------------------------------------------------------------------------
+# Mounted last, after every /api route, so the API always wins the path match.
+# This is what lets the whole product ship as ONE service on ONE origin:
+# no CORS negotiation, no second deployment, no cross-origin cookie rules.
+# If the React build is absent (e.g. backend-only dev), the API still runs fine.
+if os.path.isdir(FRONTEND_DIST_DIR):
+    from fastapi.staticfiles import StaticFiles
+    from fastapi.responses import FileResponse
+
+    _INDEX_HTML = os.path.join(FRONTEND_DIST_DIR, "index.html")
+
+    # Hashed build assets — safe to cache aggressively.
+    _assets_dir = os.path.join(FRONTEND_DIST_DIR, "assets")
+    if os.path.isdir(_assets_dir):
+        app.mount("/assets", StaticFiles(directory=_assets_dir), name="assets")
+
+    @app.get("/{full_path:path}", include_in_schema=False)
+    def serve_spa(full_path: str):
+        """Serve a real static file when it exists, else fall back to index.html."""
+        # Never let the SPA fallback swallow an unmatched API call — that would
+        # return HTML to a fetch() expecting JSON and produce a confusing error.
+        if full_path.startswith(("api/", "docs", "openapi.json", "redoc")):
+            raise HTTPException(status_code=404, detail="Not found")
+
+        candidate = os.path.normpath(os.path.join(FRONTEND_DIST_DIR, full_path))
+        # Guard against path traversal escaping the build directory.
+        if candidate.startswith(os.path.abspath(FRONTEND_DIST_DIR)) and os.path.isfile(candidate):
+            return FileResponse(candidate)
+
+        return FileResponse(_INDEX_HTML)
+
+    logger.info("[Startup] Serving React SPA from %s", FRONTEND_DIST_DIR)
+else:
+    logger.warning(
+        "[Startup] No frontend build at %s — running API-only. "
+        "Run 'npm run build' in frontend/ to serve the UI from this process.",
+        FRONTEND_DIST_DIR,
+    )

@@ -1,31 +1,34 @@
-version: '3.8'
+# =============================================================================
+# DocMind AI - local container run
+# =============================================================================
+# Builds the same single image that is deployed to Render: the React SPA is
+# compiled into the image and served by FastAPI on one origin.
+#
+#   cp .env.example .env   # fill in OPENROUTER_API_KEY and JWT_SECRET_KEY
+#   docker compose up --build
+#   open http://localhost:8000
+# =============================================================================
 
 services:
-  backend:
+  docmind:
     build:
       context: .
-      dockerfile: backend/Dockerfile
-    container_name: docmind-backend
+      dockerfile: Dockerfile
+    container_name: docmind
     restart: unless-stopped
     ports:
       - "8000:8000"
     environment:
-      - OPENROUTER_API_KEY=${OPENROUTER_API_KEY}
-      - GEMINI_API_KEY=${GEMINI_API_KEY}
-      - JWT_SECRET_KEY=${JWT_SECRET_KEY}
-      - CORS_ORIGINS=http://localhost:5173,http://localhost:3000,http://localhost:80,http://127.0.0.1:5173
+      OPENROUTER_API_KEY: ${OPENROUTER_API_KEY:?set OPENROUTER_API_KEY in .env}
+      JWT_SECRET_KEY: ${JWT_SECRET_KEY:?set JWT_SECRET_KEY in .env}
+      GEMINI_API_KEY: ${GEMINI_API_KEY:-}
+      DATA_DIR: /data
+      DEMO_SEED: ${DEMO_SEED:-true}
+      DEMO_PASSWORD: ${DEMO_PASSWORD:-demo1234}
+      LOG_LEVEL: ${LOG_LEVEL:-INFO}
     volumes:
-      - ./backend/uploads:/app/backend/uploads
-      - ./backend/faiss_indices:/app/backend/faiss_indices
-      - ./backend/docmind.db:/app/backend/docmind.db
+      # Named volume keeps uploads, FAISS indices and the SQLite DB across restarts.
+      - docmind-data:/data
 
-  frontend:
-    build:
-      context: ./frontend
-      dockerfile: Dockerfile
-    container_name: docmind-frontend
-    restart: unless-stopped
-    ports:
-      - "3000:80"
-    depends_on:
-      - backend
+volumes:
+  docmind-data:

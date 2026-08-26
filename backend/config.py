@@ -1,26 +1,83 @@
+"""
+Central configuration for DocMind AI.
+
+Every value is environment-driven with a sane default, so the same codebase runs
+unchanged on a laptop, in Docker, and on a cloud host. No secrets live in here —
+they are read from the environment (loaded from backend/.env in local dev).
+"""
+
 import os
+
 from dotenv import load_dotenv
 
-# Directory configurations
+# --- Paths -----------------------------------------------------------------
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-UPLOAD_DIR = os.path.join(BASE_DIR, "uploads")
-FAISS_DIR = os.path.join(BASE_DIR, "faiss_indices")
+REPO_ROOT = os.path.dirname(BASE_DIR)
 
-# Load environment variables using absolute path
+# Load local .env first (never present in production — the host injects env vars).
 load_dotenv(os.path.join(BASE_DIR, ".env"))
+load_dotenv(os.path.join(REPO_ROOT, ".env"))
 
-OPENROUTER_API_KEY = os.getenv("OPENROUTER_API_KEY")
-GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
 
-# Create directories if they don't exist
+def _env_int(name: str, default: int) -> int:
+    """Read an int env var, falling back to the default if unset or malformed."""
+    try:
+        return int(os.getenv(name, default))
+    except (TypeError, ValueError):
+        return default
+
+
+def _env_float(name: str, default: float) -> float:
+    try:
+        return float(os.getenv(name, default))
+    except (TypeError, ValueError):
+        return default
+
+
+def _env_bool(name: str, default: bool = False) -> bool:
+    return os.getenv(name, str(default)).strip().lower() in ("1", "true", "yes", "on")
+
+
+# DATA_DIR is the single writable root for all runtime state. Point it at a
+# mounted volume in production to make uploads/indices/DB survive restarts.
+DATA_DIR = os.getenv("DATA_DIR") or BASE_DIR
+
+UPLOAD_DIR = os.path.join(DATA_DIR, "uploads")
+FAISS_DIR = os.path.join(DATA_DIR, "faiss_indices")
+DB_FILE = os.getenv("DB_FILE") or os.path.join(DATA_DIR, "docmind.db")
+
 os.makedirs(UPLOAD_DIR, exist_ok=True)
 os.makedirs(FAISS_DIR, exist_ok=True)
 
-# Model Settings (Using OpenRouter)
-EMBEDDING_MODEL = "openai/text-embedding-3-small"
-LLM_MODEL = "nvidia/nemotron-3-nano-30b-a3b:free"
+# Directory holding the compiled React SPA. Served by FastAPI in production so
+# the whole app is a single origin (no CORS, one deployable service).
+FRONTEND_DIST_DIR = os.path.abspath(
+    os.getenv("FRONTEND_DIST_DIR") or os.path.join(REPO_ROOT, "frontend", "dist")
+)
 
-# RAG Settings
-CHUNK_SIZE = 1000   # ~150 words — enough for one coherent paragraph
-CHUNK_OVERLAP = 150  # 15% overlap — prevents boundary fragmentation
-TOP_K = 8
+# --- Secrets ---------------------------------------------------------------
+OPENROUTER_API_KEY = os.getenv("OPENROUTER_API_KEY")
+GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
+
+# --- Models ----------------------------------------------------------------
+EMBEDDING_MODEL = os.getenv("EMBEDDING_MODEL", "openai/text-embedding-3-small")
+LLM_MODEL = os.getenv("LLM_MODEL", "nvidia/nemotron-3-nano-30b-a3b:free")
+
+# --- RAG tuning ------------------------------------------------------------
+CHUNK_SIZE = _env_int("CHUNK_SIZE", 1000)          # ~150 words — one coherent paragraph
+CHUNK_OVERLAP = _env_int("CHUNK_OVERLAP", 150)     # 15% overlap — avoids boundary fragmentation
+TOP_K = _env_int("TOP_K", 8)                       # chunks passed to the LLM as context
+RELEVANCE_THRESHOLD = _env_float("RELEVANCE_THRESHOLD", 0.50)  # below this, a chunk is dropped
+VECTOR_WEIGHT = _env_float("VECTOR_WEIGHT", 0.6)   # hybrid score = VECTOR_WEIGHT*vec + (1-w)*bm25
+
+# --- Uploads ---------------------------------------------------------------
+MAX_UPLOAD_MB = _env_int("MAX_UPLOAD_MB", 25)
+MAX_UPLOAD_BYTES = MAX_UPLOAD_MB * 1024 * 1024
+
+# --- Demo mode -------------------------------------------------------------
+# On free hosting the disk is ephemeral, so a cold start would show an empty app.
+# When enabled, a bundled sample PDF is indexed on boot so the demo is never blank.
+DEMO_SEED = _env_bool("DEMO_SEED", False)
+DEMO_PDF_PATH = os.getenv("DEMO_PDF_PATH") or os.path.join(REPO_ROOT, "assets", "demo", "sample.pdf")
+DEMO_USERNAME = os.getenv("DEMO_USERNAME", "demo")
+DEMO_PASSWORD = os.getenv("DEMO_PASSWORD", "demo1234")

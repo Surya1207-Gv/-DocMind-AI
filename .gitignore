@@ -1,57 +1,89 @@
-# Environment Secrets
+# =============================================================================
+# Secrets - never commit these
+# =============================================================================
 .env
+.env.*
+!.env.example
 backend/.env
+backend/.env.*
+!backend/.env.example
+*.pem
+*.key
+secrets.json
 
-# Python files
+# =============================================================================
+# Python
+# =============================================================================
 __pycache__/
 *.py[cod]
 *$py.class
+*.so
 venv/
+.venv/
+env/
 backend/venv/
 .pytest_cache/
+.mypy_cache/
+.ruff_cache/
 .coverage
+.coverage.*
 htmlcov/
+coverage.xml
+*.egg-info/
+build/
 
-# Node files
+# =============================================================================
+# Node / frontend build output
+# =============================================================================
 node_modules/
+frontend/node_modules/
 dist/
 dist-ssr/
-*.local
-frontend/node_modules/
 frontend/dist/
+*.local
+.vite/
 
-# FAISS Indices
-backend/faiss_indices/
-
-# Document Uploads
+# =============================================================================
+# Runtime state (regenerated at run time; may contain user documents)
+# =============================================================================
+# Default DATA_DIR layout
 backend/uploads/
-backend/metadata.json
-backend/metadata_migrated.json
-
-# SQLite (includes WAL mode sidecar files)
+backend/faiss_indices/
 backend/docmind.db
 backend/docmind.db-shm
 backend/docmind.db-wal
+backend/metadata.json
+backend/metadata_migrated.json
+# Custom DATA_DIR layout
+data/
+/uploads/
+/faiss_indices/
+*.db
+*.db-shm
+*.db-wal
+!eval/**/*.json
 
+# =============================================================================
 # Logs and CI artifacts
+# =============================================================================
 *.log
 test_log.txt
-coverage.xml
-*.xml
-.coverage
 
+# =============================================================================
 # Scratch / one-off scripts (not production code)
+# =============================================================================
 backend/scratch_*.py
 backend/find_free_models.py
 backend/test_reranking_proposed*.py
 
-# Editor configurations
+# =============================================================================
+# Editors / OS
+# =============================================================================
 .vscode/
 .idea/
 .project
 .pydevproject
 .settings/
-
-# OS files
 .DS_Store
 Thumbs.db
+desktop.ini

@@ -9,38 +9,38 @@ on:
 jobs:
   backend-tests:
     runs-on: ubuntu-latest
-    permissions:
-      contents: write
     steps:
     - uses: actions/checkout@v4
 
     - name: Set up Python
       uses: actions/setup-python@v5
       with:
-        python-version: '3.11'
+        # Matches the python:3.12-slim base image used in the Dockerfile.
+        python-version: '3.12'
         cache: 'pip'
 
     - name: Install dependencies
       run: |
         python -m pip install --upgrade pip
-        pip install -r backend/requirements.txt
+        pip install -r backend/requirements-dev.txt
 
-    - name: Run Backend Tests with Pytest
+    - name: Run backend tests
       env:
         PYTHONPATH: .
+        # Placeholder values: the suite mocks every outbound provider call.
         OPENROUTER_API_KEY: mock_openrouter_key
         GEMINI_API_KEY: mock_gemini_key
         JWT_SECRET_KEY: mock_secret_key
       run: |
-        python -m pytest backend/tests/ -v --tb=short --cov=backend --cov-report=xml > test_log.txt 2>&1 || TEST_EXIT_CODE=$?
-        if [ -n "$TEST_EXIT_CODE" ] && [ "$TEST_EXIT_CODE" -ne 0 ]; then
-          git config --global user.name "CI Debugger"
-          git config --global user.email "ci-debug@docmind.ai"
-          git add test_log.txt
-          git commit -m "chore: upload GHA test failure logs [skip ci]"
-          git push
-          exit $TEST_EXIT_CODE
-        fi
+        python -m pytest backend/tests/ -v --tb=short --cov=backend --cov-report=xml --cov-report=term
+
+    - name: Upload coverage report
+      if: always()
+      uses: actions/upload-artifact@v4
+      with:
+        name: backend-coverage
+        path: coverage.xml
+        if-no-files-found: ignore
 
   frontend-tests:
     runs-on: ubuntu-latest
@@ -55,11 +55,14 @@ jobs:
         cache-dependency-path: frontend/package-lock.json
 
     - name: Install dependencies
-      run: |
-        cd frontend
-        npm ci || npm install
+      run: npm ci || npm install
+      working-directory: frontend
 
-    - name: Run Frontend Tests with Vitest
-      run: |
-        cd frontend
-        npm run test
+    - name: Run frontend tests
+      run: npm run test
+      working-directory: frontend
+
+    # The production image builds the SPA, so a broken build must fail CI.
+    - name: Verify production build
+      run: npm run build
+      working-directory: frontend

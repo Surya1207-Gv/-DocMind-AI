@@ -1,0 +1,359 @@
+%PDF-1.4
+%‚„œ”
+1 0 obj
+<< /Type /Catalog /Pages 2 0 R >>
+endobj
+2 0 obj
+<< /Type /Pages /Count 4 /Kids [5 0 R 6 0 R 7 0 R 8 0 R] >>
+endobj
+3 0 obj
+<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica /Encoding /WinAnsiEncoding >>
+endobj
+4 0 obj
+<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica-Bold /Encoding /WinAnsiEncoding >>
+endobj
+5 0 obj
+<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Resources << /Font << /F1 3 0 R /F2 4 0 R >> >> /Contents 9 0 R >>
+endobj
+6 0 obj
+<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Resources << /Font << /F1 3 0 R /F2 4 0 R >> >> /Contents 10 0 R >>
+endobj
+7 0 obj
+<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Resources << /Font << /F1 3 0 R /F2 4 0 R >> >> /Contents 11 0 R >>
+endobj
+8 0 obj
+<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Resources << /Font << /F1 3 0 R /F2 4 0 R >> >> /Contents 12 0 R >>
+endobj
+9 0 obj
+<< /Length 2128 >>
+stream
+BT
+/F2 17 Tf
+1 0 0 1 62 704.0 Tm
+(DocMind AI - Field Handbook) Tj
+/F1 10.5 Tf
+1 0 0 1 62 689.0 Tm
+(Version 2.0 | Retrieval-Augmented Generation over private documents) Tj
+/F2 12 Tf
+1 0 0 1 62 655.0 Tm
+(1. PURPOSE) Tj
+/F1 10.5 Tf
+1 0 0 1 62 640.0 Tm
+(This handbook is the reference document bundled with DocMind AI so that) Tj
+/F1 10.5 Tf
+1 0 0 1 62 625.0 Tm
+(the system can be demonstrated immediately, without uploading a file. It) Tj
+/F1 10.5 Tf
+1 0 0 1 62 610.0 Tm
+(is written to exercise every part of the retrieval pipeline: definitions,) Tj
+/F1 10.5 Tf
+1 0 0 1 62 595.0 Tm
+(numbered settings, section headers, and facts that span two pages.) Tj
+/F2 12 Tf
+1 0 0 1 62 561.0 Tm
+(2. WHAT RETRIEVAL-AUGMENTED GENERATION IS) Tj
+/F1 10.5 Tf
+1 0 0 1 62 546.0 Tm
+(Retrieval-Augmented Generation is a technique that grounds a language) Tj
+/F1 10.5 Tf
+1 0 0 1 62 531.0 Tm
+(model answer in documents fetched at question time, rather than relying) Tj
+/F1 10.5 Tf
+1 0 0 1 62 516.0 Tm
+(on the parameters the model learned during training. The retrieved text is) Tj
+/F1 10.5 Tf
+1 0 0 1 62 501.0 Tm
+(placed into the prompt as context, and the model is instructed to answer) Tj
+/F1 10.5 Tf
+1 0 0 1 62 486.0 Tm
+(only from that context.) Tj
+/F1 10.5 Tf
+1 0 0 1 62 456.0 Tm
+(The benefit is twofold. Answers stay current, because updating the corpus) Tj
+/F1 10.5 Tf
+1 0 0 1 62 441.0 Tm
+(requires no retraining. Answers stay auditable, because every claim can be) Tj
+/F1 10.5 Tf
+1 0 0 1 62 426.0 Tm
+(traced to a specific page of a specific source document.) Tj
+/F2 12 Tf
+1 0 0 1 62 392.0 Tm
+(3. WHY GROUNDING MATTERS) Tj
+/F1 10.5 Tf
+1 0 0 1 62 377.0 Tm
+(A language model asked a question outside its knowledge will often produce) Tj
+/F1 10.5 Tf
+1 0 0 1 62 362.0 Tm
+(a fluent but fabricated answer. This failure is called hallucination.) Tj
+/F1 10.5 Tf
+1 0 0 1 62 347.0 Tm
+(Grounding reduces hallucination by making the correct answer available in) Tj
+/F1 10.5 Tf
+1 0 0 1 62 332.0 Tm
+(the prompt and by giving the system a defensible way to say it does not) Tj
+/F1 10.5 Tf
+1 0 0 1 62 317.0 Tm
+(know when retrieval returns nothing relevant.) Tj
+ET
+endstream
+endobj
+10 0 obj
+<< /Length 2292 >>
+stream
+BT
+/F2 17 Tf
+1 0 0 1 62 704.0 Tm
+(4. THE INGESTION PIPELINE) Tj
+/F2 12 Tf
+1 0 0 1 62 670.0 Tm
+(4.1 TEXT EXTRACTION) Tj
+/F1 10.5 Tf
+1 0 0 1 62 655.0 Tm
+(A PDF is read page by page. Page numbers are preserved at extraction time,) Tj
+/F1 10.5 Tf
+1 0 0 1 62 640.0 Tm
+(because a citation that cannot name a page is not verifiable. Pages that) Tj
+/F1 10.5 Tf
+1 0 0 1 62 625.0 Tm
+(yield no text are skipped; a document that yields no text at all is) Tj
+/F1 10.5 Tf
+1 0 0 1 62 610.0 Tm
+(rejected as scanned or empty rather than indexed as a silent failure.) Tj
+/F2 12 Tf
+1 0 0 1 62 576.0 Tm
+(4.2 CHUNKING) Tj
+/F1 10.5 Tf
+1 0 0 1 62 561.0 Tm
+(Extracted text is split recursively on paragraph, sentence, and word) Tj
+/F1 10.5 Tf
+1 0 0 1 62 546.0 Tm
+(boundaries. The default chunk size is 1000 characters with an overlap of) Tj
+/F1 10.5 Tf
+1 0 0 1 62 531.0 Tm
+(150 characters, an overlap of fifteen percent.) Tj
+/F1 10.5 Tf
+1 0 0 1 62 501.0 Tm
+(Chunk size is a trade-off. Chunks that are too small lose the surrounding) Tj
+/F1 10.5 Tf
+1 0 0 1 62 486.0 Tm
+(argument and retrieve confidently but answer incompletely. Chunks that are) Tj
+/F1 10.5 Tf
+1 0 0 1 62 471.0 Tm
+(too large dilute the embedding, because a single vector must represent) Tj
+/F1 10.5 Tf
+1 0 0 1 62 456.0 Tm
+(several unrelated ideas at once. Overlap exists so that a sentence falling) Tj
+/F1 10.5 Tf
+1 0 0 1 62 441.0 Tm
+(across a boundary still appears whole in one of the two neighbours.) Tj
+/F2 12 Tf
+1 0 0 1 62 407.0 Tm
+(4.3 EMBEDDING) Tj
+/F1 10.5 Tf
+1 0 0 1 62 392.0 Tm
+(Each chunk is converted into a dense vector by an embedding model. Two) Tj
+/F1 10.5 Tf
+1 0 0 1 62 377.0 Tm
+(passages with similar meaning receive vectors that sit close together, so) Tj
+/F1 10.5 Tf
+1 0 0 1 62 362.0 Tm
+(meaning-based search becomes a nearest-neighbour lookup. Chunks are) Tj
+/F1 10.5 Tf
+1 0 0 1 62 347.0 Tm
+(embedded in batches of up to 500 to reduce the number of API round trips.) Tj
+/F2 12 Tf
+1 0 0 1 62 313.0 Tm
+(4.4 INDEXING) Tj
+/F1 10.5 Tf
+1 0 0 1 62 298.0 Tm
+(Vectors are stored in a FAISS index, one index per document, written to) Tj
+/F1 10.5 Tf
+1 0 0 1 62 283.0 Tm
+(disk. Because each document is a separate index, a document can be deleted) Tj
+/F1 10.5 Tf
+1 0 0 1 62 268.0 Tm
+(by removing its directory, with no global rebuild.) Tj
+ET
+endstream
+endobj
+11 0 obj
+<< /Length 2262 >>
+stream
+BT
+/F2 17 Tf
+1 0 0 1 62 704.0 Tm
+(5. THE QUERY PIPELINE) Tj
+/F2 12 Tf
+1 0 0 1 62 670.0 Tm
+(5.1 HYBRID RETRIEVAL) Tj
+/F1 10.5 Tf
+1 0 0 1 62 655.0 Tm
+(DocMind AI retrieves with two methods at once and merges the result.) Tj
+/F1 10.5 Tf
+1 0 0 1 76 640.0 Tm
+(- Dense vector search finds passages that mean the same thing as the) Tj
+/F1 10.5 Tf
+1 0 0 1 76 625.0 Tm
+(question even when they share no vocabulary with it.) Tj
+/F1 10.5 Tf
+1 0 0 1 76 610.0 Tm
+(- BM25 keyword search finds passages containing the exact rare terms of) Tj
+/F1 10.5 Tf
+1 0 0 1 76 595.0 Tm
+(the question, such as an identifier, an acronym, or a product name.) Tj
+/F1 10.5 Tf
+1 0 0 1 62 565.0 Tm
+(Each method fails where the other succeeds. Vector search misses exact) Tj
+/F1 10.5 Tf
+1 0 0 1 62 550.0 Tm
+(identifiers because embeddings blur precise tokens. Keyword search misses) Tj
+/F1 10.5 Tf
+1 0 0 1 62 535.0 Tm
+(paraphrase because it cannot match words it has never seen. Running both) Tj
+/F1 10.5 Tf
+1 0 0 1 62 520.0 Tm
+(and combining their scores is called hybrid retrieval.) Tj
+/F2 12 Tf
+1 0 0 1 62 486.0 Tm
+(5.2 SCORE FUSION) Tj
+/F1 10.5 Tf
+1 0 0 1 62 471.0 Tm
+(The system fetches three times the requested number of candidates, scores) Tj
+/F1 10.5 Tf
+1 0 0 1 62 456.0 Tm
+(each candidate by both methods, and blends them. The default weighting is) Tj
+/F1 10.5 Tf
+1 0 0 1 62 441.0 Tm
+(0.6 for the vector score and 0.4 for the BM25 score.) Tj
+/F2 12 Tf
+1 0 0 1 62 407.0 Tm
+(5.3 RELEVANCE THRESHOLD) Tj
+/F1 10.5 Tf
+1 0 0 1 62 392.0 Tm
+(A candidate whose blended score falls below 0.50 is discarded rather than) Tj
+/F1 10.5 Tf
+1 0 0 1 62 377.0 Tm
+(returned. This is deliberate. Returning the least-bad chunk when nothing) Tj
+/F1 10.5 Tf
+1 0 0 1 62 362.0 Tm
+(relevant exists is what causes a grounded system to hallucinate anyway.) Tj
+/F1 10.5 Tf
+1 0 0 1 62 347.0 Tm
+(An empty result is a correct result when the corpus lacks the answer.) Tj
+/F2 12 Tf
+1 0 0 1 62 313.0 Tm
+(5.4 CONTEXT EXPANSION) Tj
+/F1 10.5 Tf
+1 0 0 1 62 298.0 Tm
+(Once a chunk is selected, the chunk immediately following it is appended.) Tj
+/F1 10.5 Tf
+1 0 0 1 62 283.0 Tm
+(A retrieved passage often ends mid-argument, and the sentence that) Tj
+/F1 10.5 Tf
+1 0 0 1 62 268.0 Tm
+(completes it lives in the next chunk.) Tj
+ET
+endstream
+endobj
+12 0 obj
+<< /Length 2420 >>
+stream
+BT
+/F2 17 Tf
+1 0 0 1 62 704.0 Tm
+(6. THE ANSWERING STAGE) Tj
+/F1 10.5 Tf
+1 0 0 1 62 674.0 Tm
+(The surviving chunks are assembled into a context block and sent to the) Tj
+/F1 10.5 Tf
+1 0 0 1 62 659.0 Tm
+(language model with an instruction to answer only from that context and to) Tj
+/F1 10.5 Tf
+1 0 0 1 62 644.0 Tm
+(cite the page it used. The default number of chunks passed to the model is) Tj
+/F1 10.5 Tf
+1 0 0 1 62 629.0 Tm
+(8, controlled by the setting named TOP K.) Tj
+/F2 12 Tf
+1 0 0 1 62 595.0 Tm
+(6.1 MULTI-HOP QUESTIONS) Tj
+/F1 10.5 Tf
+1 0 0 1 62 580.0 Tm
+(Some questions cannot be answered by a single retrieval. A question that) Tj
+/F1 10.5 Tf
+1 0 0 1 62 565.0 Tm
+(compares two things, or that requires one fact in order to look up a) Tj
+/F1 10.5 Tf
+1 0 0 1 62 550.0 Tm
+(second, needs more than one pass. For these, a planner first decomposes) Tj
+/F1 10.5 Tf
+1 0 0 1 62 535.0 Tm
+(the question into two or three focused sub-queries, each sub-query is) Tj
+/F1 10.5 Tf
+1 0 0 1 62 520.0 Tm
+(retrieved separately, and the merged evidence is synthesised into one) Tj
+/F1 10.5 Tf
+1 0 0 1 62 505.0 Tm
+(answer. A final verification step checks the drafted claims back against) Tj
+/F1 10.5 Tf
+1 0 0 1 62 490.0 Tm
+(the retrieved context before the answer is shown.) Tj
+/F2 12 Tf
+1 0 0 1 62 456.0 Tm
+(7. EVALUATION) Tj
+/F1 10.5 Tf
+1 0 0 1 62 441.0 Tm
+(Retrieval quality is measured, not assumed. The benchmark corpus contains) Tj
+/F1 10.5 Tf
+1 0 0 1 62 426.0 Tm
+(1200 chunks and 60 questions with known correct answers. The metrics used) Tj
+/F1 10.5 Tf
+1 0 0 1 62 411.0 Tm
+(are Recall at k, which asks whether the correct passage appeared at all,) Tj
+/F1 10.5 Tf
+1 0 0 1 62 396.0 Tm
+(and Mean Reciprocal Rank, which asks how near the top it appeared.) Tj
+/F1 10.5 Tf
+1 0 0 1 62 366.0 Tm
+(Measuring both matters, because a change can improve one and damage the) Tj
+/F1 10.5 Tf
+1 0 0 1 62 351.0 Tm
+(other. Adding candidates usually raises recall while lowering precision.) Tj
+/F2 12 Tf
+1 0 0 1 62 317.0 Tm
+(8. KNOWN LIMITATIONS) Tj
+/F1 10.5 Tf
+1 0 0 1 76 302.0 Tm
+(- Scanned PDFs without a text layer cannot be read; no OCR is performed.) Tj
+/F1 10.5 Tf
+1 0 0 1 76 287.0 Tm
+(- Tables lose their column structure during text extraction.) Tj
+/F1 10.5 Tf
+1 0 0 1 76 272.0 Tm
+(- Answers are only as good as the corpus; the system cannot know a fact) Tj
+/F1 10.5 Tf
+1 0 0 1 76 257.0 Tm
+(that no uploaded document contains.) Tj
+ET
+endstream
+endobj
+xref
+0 13
+0000000000 65535 f 
+0000000015 00000 n 
+0000000064 00000 n 
+0000000139 00000 n 
+0000000236 00000 n 
+0000000338 00000 n 
+0000000474 00000 n 
+0000000611 00000 n 
+0000000748 00000 n 
+0000000885 00000 n 
+0000003065 00000 n 
+0000005410 00000 n 
+0000007725 00000 n 
+trailer
+<< /Size 13 /Root 1 0 R >>
+startxref
+10198
+%%EOF
