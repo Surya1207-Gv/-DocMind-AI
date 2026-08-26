@@ -117,6 +117,28 @@ class OpenRouterChat(BaseChatModel):
     def _llm_type(self) -> str:
         return "openrouter-chat"
 
+def normalize_gemini_content(content: Any) -> str:
+    """
+    Normalize Gemini/LangChain chunk content to plain text.
+    Gemini may return a string or a list of content blocks.
+    """
+    if isinstance(content, str):
+        return content
+
+    if isinstance(content, list):
+        parts = []
+        for item in content:
+            if isinstance(item, str):
+                parts.append(item)
+            elif isinstance(item, dict):
+                item_text = item.get("text")
+                if isinstance(item_text, str):
+                    parts.append(item_text)
+        return "".join(parts)
+
+    return ""
+
+
 def get_mode_temperature(mode: str) -> float:
     if mode == "qa":
         return 0.2
@@ -134,7 +156,6 @@ def get_llm_model(temperature: float = 0.2):
         return ChatGoogleGenerativeAI(
             model="gemini-3.6-flash",
             google_api_key=GEMINI_API_KEY,
-            temperature=temperature,
             max_retries=0,
             convert_system_message_to_human=True
         )
@@ -491,16 +512,14 @@ def run_chat_stream(request: ChatRequest, user_id: str):
     if GEMINI_API_KEY:
         try:
             from langchain_google_genai import ChatGoogleGenerativeAI
-            temp = get_mode_temperature(request.mode)
             llm = ChatGoogleGenerativeAI(
                 model="gemini-3.6-flash",
                 google_api_key=GEMINI_API_KEY,
-                temperature=temp,
                 max_retries=0,
                 convert_system_message_to_human=True
             )
             for chunk in llm.stream(messages_list):
-                delta = chunk.content
+                delta = normalize_gemini_content(chunk.content)
                 if delta:
                     stream_answer += delta
                     yield f"data: {json.dumps({'type': 'token', 'text': delta})}\n\n"
@@ -508,7 +527,7 @@ def run_chat_stream(request: ChatRequest, user_id: str):
             logger.exception("Gemini generation failed: %s", e)
             if OPENROUTER_API_KEY:
                 try:
-                    yield "data: " + json.dumps({'type': 'token', 'text': "*(Gemini API quota exceeded. Falling back to OpenRouter...)*\n\n"}) + "\n\n"
+                    yield "data: " + json.dumps({'type': 'token', 'text': "*(Gemini generation failed. Falling back to OpenRouter...)*\n\n"}) + "\n\n"
                     formatted_messages = []
                     for msg in messages_list:
                         role = "user"
