@@ -505,6 +505,7 @@ def run_chat_stream(request: ChatRequest, user_id: str):
                     stream_answer += delta
                     yield f"data: {json.dumps({'type': 'token', 'text': delta})}\n\n"
         except Exception as e:
+            logger.exception("Gemini generation failed: %s", e)
             if OPENROUTER_API_KEY:
                 try:
                     yield "data: " + json.dumps({'type': 'token', 'text': "*(Gemini API quota exceeded. Falling back to OpenRouter...)*\n\n"}) + "\n\n"
