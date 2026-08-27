@@ -357,6 +357,7 @@ def run_chat_stream(request: ChatRequest, user_id: str):
     full_answer = ""
     prefix_note = ""
     retrieval_ms = None      # populated only on the retrieval path
+    search_results = []      # (Document, distance) pairs from retrieval
     retrieval_scores = []    # per-source hybrid relevance, 0-1
     contradictions = []      # cross-document conflicts found in the evidence
     retrieval_trace = {}     # developer trace of the retrieval stage
@@ -842,11 +843,20 @@ def run_chat_stream(request: ChatRequest, user_id: str):
     # ELI5 is instructed to explain in everyday language with an analogy, so an
     # answer that shares no vocabulary with the source is the mode working, not
     # failing. Every other mode is told to use the context's own facts.
+    # Best absolute lexical evidence among the retrieved passages. The fused
+    # score alone under-represents a keyword-style question, so the gate is
+    # given both readings of the same evidence.
+    best_lexical_coverage = max(
+        (float(doc.metadata.get("lexical_coverage") or 0.0) for doc, _ in search_results),
+        default=0.0,
+    )
+
     gated_answer, was_gated = apply_evidence_gate(
         cleaned_stream_answer,
         confidence_result,
         report,
         paraphrase_expected=(request.mode == "eli5"),
+        lexical_coverage=best_lexical_coverage,
     )
 
     confidence = confidence_result.score
@@ -912,8 +922,11 @@ def run_chat_stream(request: ChatRequest, user_id: str):
             "rewrite": rewrite.to_dict() if rewrite else None,
             "retrieval": retrieval_trace,
             "confidence": confidence_result.to_dict(),
+            "final_confidence": confidence,
+            "confidence_band": confidence_band,
             "verification": report.to_dict(),
             "evidence_gated": was_gated,
+            "lexical_coverage": round(best_lexical_coverage, 4),
             "reranker": RERANKER,
             "model": LLM_MODEL,
         }

@@ -89,6 +89,24 @@ TOP_K = _env_int("TOP_K", 8)                       # chunks passed to the LLM as
 RELEVANCE_THRESHOLD = _env_float("RELEVANCE_THRESHOLD", 0.50)  # below this, a chunk is dropped
 VECTOR_WEIGHT = _env_float("VECTOR_WEIGHT", 0.6)   # hybrid score = VECTOR_WEIGHT*vec + (1-w)*bm25
 
+# A passage containing at least this fraction of the query's information content
+# (IDF-weighted term coverage) is admitted on lexical evidence alone, whatever
+# the fused score says.
+#
+# Why this exists: the fused score weights BM25 at 1-VECTOR_WEIGHT = 0.4, which
+# is BELOW RELEVANCE_THRESHOLD (0.5). A passage that is the single unambiguous
+# exact match for the query therefore could not clear the gate on lexical
+# evidence alone -- it still needed vector_sim >= 0.167 to survive. That
+# inverted the point of hybrid retrieval precisely for the queries BM25 exists
+# to serve: short strings of proper nouns and identifiers ("Dartmouth Conference
+# 1956", "RFC 8446"), which carry the most lexical signal and the least semantic
+# signal for an embedding model to work with.
+#
+# The fused score and its 0.6/0.4 weights are untouched: they still decide the
+# ORDER. This governs admission only, and only in the direction of admitting
+# evidence that was being wrongly discarded.
+LEXICAL_COVERAGE_THRESHOLD = _env_float("LEXICAL_COVERAGE_THRESHOLD", 0.5)
+
 # --- Uploads ---------------------------------------------------------------
 MAX_UPLOAD_MB = _env_int("MAX_UPLOAD_MB", 25)
 MAX_UPLOAD_BYTES = MAX_UPLOAD_MB * 1024 * 1024

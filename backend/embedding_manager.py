@@ -10,6 +10,7 @@ from backend.config import (
     OPENROUTER_API_KEY,
     EMBEDDING_MODEL,
     FAISS_DIR,
+    LEXICAL_COVERAGE_THRESHOLD,
     RELEVANCE_THRESHOLD,
     VECTOR_WEIGHT,
 )
@@ -155,6 +156,47 @@ class SimpleBM25:
         for word, freq in df.items():
             self.idf[word] = math.log((self.corpus_size - freq + 0.5) / (freq + 0.5) + 1.0)
             
+    def query_coverage(self, query: str, doc_index: int) -> float:
+        """
+        Fraction of the query's total information content this passage contains,
+        on an absolute 0-1 scale.
+
+        This is the measure `get_score` cannot provide. A raw BM25 score is
+        unbounded and only comparable within one candidate set, so the pipeline
+        normalises it against the best candidate -- after which the top hit
+        always scores 1.0 whether it matched every query term or one common
+        one. All absolute information about match quality is destroyed at
+        exactly the point the relevance gate needs it.
+
+        Coverage weights each query term by its IDF, so rare, identifying terms
+        ("dartmouth", "8446") dominate and filler does not. A term absent from
+        the entire corpus counts against coverage at maximum IDF: it is
+        information the question asked for that the documents do not contain.
+        Excluding those terms instead is what would let a question about
+        OpenAI's share price score a perfect match against an unrelated page
+        merely because both mention "AI".
+        """
+        if self.corpus_size == 0 or doc_index >= self.corpus_size:
+            return 0.0
+
+        terms = set(tokenize(query))
+        if not terms:
+            return 0.0
+
+        # IDF for a term appearing in no document at all.
+        unseen_idf = math.log((self.corpus_size + 0.5) / 0.5 + 1.0)
+
+        def term_idf(term: str) -> float:
+            return self.idf.get(term, unseen_idf)
+
+        total = sum(term_idf(t) for t in terms)
+        if total <= 0.0:
+            return 0.0
+
+        present = self.doc_term_freqs[doc_index]
+        matched = sum(term_idf(t) for t in terms if t in present)
+        return matched / total
+
     def get_score(self, query: str, doc_index: int) -> float:
         if self.corpus_size == 0 or doc_index >= self.corpus_size:
             return 0.0
@@ -265,6 +307,9 @@ def search_index(
     
     # Compute BM25 scores
     bm25_scores = [bm25.get_score(query, i) for i in range(len(candidates))]
+    # Absolute lexical evidence, unlike bm25_scores which are only meaningful
+    # relative to each other. See SimpleBM25.query_coverage.
+    bm25_coverage = [bm25.query_coverage(query, i) for i in range(len(candidates))]
     max_bm25 = max(bm25_scores) if bm25_scores else 0.0
     bm25_ms = (time.perf_counter() - t_bm25_start) * 1000.0
 
@@ -284,6 +329,7 @@ def search_index(
         subject = subject.strip("? .!").strip()
 
     scored_candidates = []
+    stage_scores = []
     applied_boost_types = []
     for i, (doc, vector_distance) in enumerate(candidates):
         # Convert vector distance to a normalized 0-1 similarity score
@@ -359,7 +405,18 @@ def search_index(
         # Apply boost and cap at 1.0
         hybrid_score = min(1.0, hybrid_score + custom_boost)
         
-        scored_candidates.append((doc, vector_distance, hybrid_score))
+        stage_scores.append({
+            "doc_name": doc.metadata.get("doc_name"),
+            "page": doc.metadata.get("page"),
+            "chunk_index": doc.metadata.get("chunk_index"),
+            "l2_distance": round(float(vector_distance), 4),
+            "vector_score": round(vector_sim, 4),
+            "bm25_raw": round(bm25_scores[i], 4),
+            "bm25_normalized": round(bm25_normalized, 4),
+            "lexical_coverage": round(bm25_coverage[i], 4),
+            "hybrid_score": round(hybrid_score, 4),
+        })
+        scored_candidates.append((doc, vector_distance, hybrid_score, bm25_coverage[i]))
         
     # Sort candidates by combined hybrid score descending
     scored_candidates.sort(key=lambda x: x[2], reverse=True)
@@ -373,13 +430,21 @@ def search_index(
     t_rerank_start = time.perf_counter()
     reranked = []
     if use_rerank:
+        coverage_by_id = {
+            id(doc): coverage for doc, _dist, _hybrid, coverage in scored_candidates
+        }
         reranked = rerank(
             query,
-            [(doc, hybrid) for doc, _dist, hybrid in scored_candidates],
+            [(doc, hybrid) for doc, _dist, hybrid, _cov in scored_candidates],
             llm=rerank_llm,
         )
         scored_candidates = [
-            (c.document, 2.0 * (1.0 - c.final_score), c.final_score)
+            (
+                c.document,
+                2.0 * (1.0 - c.final_score),
+                c.final_score,
+                coverage_by_id.get(id(c.document), 0.0),
+            )
             for c in reranked
         ]
     rerank_ms = (time.perf_counter() - t_rerank_start) * 1000.0
@@ -388,9 +453,28 @@ def search_index(
     # to simulated L2 distance matching the hybrid score (for downstream confidence scores)
     # Filter out low-relevance references below relevance threshold
     final_results = []
+    rejected = []
     seen_chunks = set()
-    for doc, _, hybrid_score in scored_candidates[:top_k]:
-        if hybrid_score < relevance_threshold:
+    for doc, _, hybrid_score, coverage in scored_candidates[:top_k]:
+        # A candidate is admitted on evidence from EITHER retriever. The fused
+        # score is a blend, and requiring the blend to clear the bar means both
+        # channels have to be independently convincing -- which is not what
+        # hybrid retrieval means, and which a short keyword query can never
+        # satisfy on the vector side. Strong absolute lexical coverage is
+        # sufficient on its own, exactly as a strong fused score is.
+        strong_lexical = coverage >= LEXICAL_COVERAGE_THRESHOLD
+        if hybrid_score < relevance_threshold and not strong_lexical:
+            rejected.append({
+                "doc_name": doc.metadata.get("doc_name"),
+                "page": doc.metadata.get("page"),
+                "chunk_index": doc.metadata.get("chunk_index"),
+                "score": round(hybrid_score, 4),
+                "lexical_coverage": round(coverage, 4),
+                "reason": (
+                    f"score {hybrid_score:.3f} < threshold {relevance_threshold} "
+                    f"and lexical coverage {coverage:.3f} < {LEXICAL_COVERAGE_THRESHOLD}"
+                ),
+            })
             continue
             
         doc_id = doc.metadata.get("doc_id")
@@ -403,6 +487,10 @@ def search_index(
         
         expanded_content = doc.page_content
         expanded_metadata = dict(doc.metadata)
+        # Carried downstream so the evidence gate can see lexical evidence too,
+        # instead of judging a passage solely by the blended score that
+        # under-represents it on keyword queries.
+        expanded_metadata["lexical_coverage"] = round(coverage, 4)
 
         # Pull next adjacent chunk to make context cohesive and complete sentences
         if doc_id and chunk_idx is not None:
@@ -460,7 +548,48 @@ def search_index(
             "rerank_ms": round(rerank_ms, 2),
             "reranked": bool(reranked),
             "boost_applied": boost_type or "none",
+            "lexical_coverage_threshold": LEXICAL_COVERAGE_THRESHOLD,
+            # Each retriever's own view of the candidates, so a bad answer can
+            # be attributed to a stage rather than guessed at. Locators and
+            # scores only -- never passage text, which would put document
+            # content into anything that captures a trace.
+            "vector_results": sorted(
+                ({k: row[k] for k in ("doc_name", "page", "chunk_index",
+                                      "l2_distance", "vector_score")}
+                 for row in stage_scores),
+                key=lambda r: r["vector_score"], reverse=True,
+            )[:10],
+            "bm25_results": sorted(
+                ({k: row[k] for k in ("doc_name", "page", "chunk_index",
+                                      "bm25_raw", "bm25_normalized", "lexical_coverage")}
+                 for row in stage_scores),
+                key=lambda r: r["bm25_raw"], reverse=True,
+            )[:10],
+            "hybrid_results": sorted(
+                ({k: row[k] for k in ("doc_name", "page", "chunk_index",
+                                      "vector_score", "bm25_normalized", "hybrid_score")}
+                 for row in stage_scores),
+                key=lambda r: r["hybrid_score"], reverse=True,
+            )[:10],
+            "reranked_results": [c.to_trace() for c in reranked[:10]],
+            # Retained under the old name so existing consumers keep working.
             "ranked": [c.to_trace() for c in reranked[:10]],
+            "rejected_candidates": rejected,
+            "rejection_reason": (
+                rejected[0]["reason"] if rejected and not final_results else None
+            ),
+            "rejected": rejected,
+            "selected_evidence": [
+                {
+                    "doc_name": d.metadata.get("doc_name"),
+                    "page": d.metadata.get("page"),
+                    "page_end": d.metadata.get("page_end"),
+                    "chunk_index": d.metadata.get("chunk_index"),
+                    "score": round(1.0 - (dist / 2.0), 4),
+                    "lexical_coverage": d.metadata.get("lexical_coverage"),
+                }
+                for d, dist in final_results
+            ],
             "selected": [
                 {
                     "doc_name": d.metadata.get("doc_name"),
@@ -468,6 +597,7 @@ def search_index(
                     "page_end": d.metadata.get("page_end"),
                     "chunk_index": d.metadata.get("chunk_index"),
                     "score": round(1.0 - (dist / 2.0), 4),
+                    "lexical_coverage": d.metadata.get("lexical_coverage"),
                 }
                 for d, dist in final_results
             ],

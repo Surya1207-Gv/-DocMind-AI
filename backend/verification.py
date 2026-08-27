@@ -31,6 +31,7 @@ import re
 from dataclasses import dataclass, field
 from typing import Any, Dict, List, Optional, Sequence, Tuple
 
+from backend.config import LEXICAL_COVERAGE_THRESHOLD
 from backend.text_utils import (
     bigrams,
     content_terms,
@@ -625,6 +626,7 @@ def apply_evidence_gate(
     confidence: ConfidenceResult,
     report: VerificationReport,
     paraphrase_expected: bool = False,
+    lexical_coverage: float = 0.0,
 ) -> Tuple[str, bool]:
     """
     Decide what the user is actually shown.
@@ -678,7 +680,19 @@ def apply_evidence_gate(
         # (1) and (3): no evidence, or evidence too weak to stand on.
         # Absent components means we have no retrieval signal to judge by, and
         # the conservative reading of "no signal" is "not enough evidence".
-        if confidence.components.get("retrieval_top", 0.0) < EVIDENCE_MIN_TOP_SCORE:
+        #
+        # retrieval_top comes from the FUSED score, which blends a semantic and
+        # a lexical channel. On a short keyword question ("What year was the
+        # Dartmouth Conference?") the semantic channel scores low simply because
+        # a three-word query and a paragraph are not similar objects, dragging
+        # the blend down even when the passage is an exact, unambiguous match.
+        # Judging that as "weak evidence" refuses a correct answer sourced from
+        # the right page. So the rule accepts either channel, on the same
+        # principle the retrieval gate uses: strong lexical coverage is
+        # evidence, not the absence of it.
+        weak_fused = confidence.components.get("retrieval_top", 0.0) < EVIDENCE_MIN_TOP_SCORE
+        weak_lexical = lexical_coverage < LEXICAL_COVERAGE_THRESHOLD
+        if weak_fused and weak_lexical:
             return refuse()
 
         # (2) fabricated specifics.
