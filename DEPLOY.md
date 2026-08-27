@@ -59,6 +59,109 @@ minimum: `OPENROUTER_API_KEY`, `JWT_SECRET_KEY`, `DATA_DIR=/data`,
 
 ---
 
+## Persistence
+
+### What is stored where
+
+Every piece of durable state lives on the local filesystem under `DATA_DIR`
+(`/data` in the container). There is no external database.
+
+| State | Location | Survives restart? |
+|---|---|---|
+| User accounts, password hashes | `$DATA_DIR/docmind.db` (SQLite, `users`) | Only with a mounted disk |
+| Chat history | `$DATA_DIR/docmind.db` (`chat_messages`) | Only with a mounted disk |
+| Analytics, quizzes | `$DATA_DIR/docmind.db` (`analytics`, `quizzes`) | Only with a mounted disk |
+| Document inventory | `$DATA_DIR/docmind.db` (`documents`) | Only with a mounted disk |
+| Uploaded originals | `$DATA_DIR/uploads/<doc_id>.<ext>` | Only with a mounted disk |
+| FAISS vector indices | `$DATA_DIR/faiss_indices/<doc_id>/` | Only with a mounted disk |
+| Logs | `$DATA_DIR/docmind.log` | Only with a mounted disk |
+
+**On Render's free plan there is no mounted disk, so none of the above
+survives.** The container is replaced whenever the instance sleeps or
+redeploys, and `docmind.db` is recreated empty.
+
+This is worth stating precisely because of how it presents: a user registers,
+uses the app, comes back the next day, and cannot log in. That looks exactly
+like an authentication bug. It is not — the account row no longer exists. The
+authentication code itself is covered by
+`backend/tests/test_regression_startup_persistence.py`, which proves the boot
+sequence never modifies or deletes an existing user.
+
+To tell the two apart on a running instance, check `GET /api/health`:
+
+```json
+"storage": {
+  "backend": "sqlite",
+  "data_dir": "/data",
+  "database_existed_at_boot": false,      // ← a fresh database: prior data is gone
+  "database_url_present_but_unused": false
+}
+```
+
+`database_existed_at_boot: false` on every deploy means `DATA_DIR` is
+ephemeral. The same warning is logged once at startup.
+
+### Fix 1 — persistent disk (recommended, no code changes)
+
+Attach a volume at `DATA_DIR` and everything above persists as-is:
+
+```yaml
+plan: starter          # a disk requires a paid instance
+disk:
+  name: docmind-data
+  mountPath: /data     # must equal DATA_DIR
+  sizeGB: 1
+```
+
+This is the whole fix. SQLite in WAL mode is entirely adequate for this
+application's write volume, and a single-service deployment is the
+architecture the project is built around.
+
+### Fix 2 — PostgreSQL (not implemented; migration path only)
+
+**This build has no PostgreSQL support.** There is no `DATABASE_URL` handling,
+no SQLAlchemy layer, and no driver in `requirements.txt`. If you attach a
+Render Postgres instance, `DATABASE_URL` will be set and the application will
+ignore it — `/api/health` reports this as
+`database_url_present_but_unused: true` so it cannot pass unnoticed.
+
+The migration is contained but real. What it would require:
+
+1. **One file holds all SQL.** `backend/database.py` is the only module that
+   issues queries; `backend/main.py` touches a connection exactly once (the
+   health probe). Nothing else in the codebase knows the database exists. This
+   is the reason the migration is tractable at all.
+2. **No abstraction exists yet.** `database.py` uses `sqlite3` directly, so a
+   migration means introducing one (SQLAlchemy Core, or a thin dialect shim).
+3. **SQLite-specific constructs that must change** — all inside `database.py`:
+   - `?` placeholders → `%s` (psycopg) or named parameters
+   - `PRAGMA journal_mode` / `synchronous` / `foreign_keys` → removed; Postgres
+     enforces foreign keys unconditionally
+   - `sqlite3.IntegrityError` / `OperationalError` → `psycopg.errors.*`
+   - `INSERT OR REPLACE` (analytics, quizzes) → `INSERT ... ON CONFLICT ... DO UPDATE`
+   - `COLLATE NOCASE` (the case-insensitive username and email lookups) →
+     `citext`, or `LOWER(col) = LOWER(%s)` with a matching functional index
+   - `ORDER BY rowid` (chat history ordering) → an explicit ordering column;
+     Postgres has no rowid
+   - `sqlite3.Row` → `psycopg.rows.dict_row`
+4. **Connection pooling.** `get_db_connection()` opens a fresh connection per
+   call, which is free for SQLite and expensive for Postgres. A pool becomes
+   necessary.
+5. **A real migration tool.** The current schema evolves via
+   `CREATE TABLE IF NOT EXISTS` plus guarded `ALTER TABLE` in `init_db()`. That
+   is acceptable for a single-file database and not for a shared one.
+6. **Uploads and FAISS indices still need a disk.** Postgres would persist the
+   relational state only. The vector indices and original files are on the
+   filesystem, so a disk (or object storage, a larger change) is *still*
+   required. **Postgres alone does not solve the persistence problem.**
+
+Given point 6, Fix 1 is the smaller and more complete change for this
+architecture. Postgres becomes worth the migration when the deployment needs
+more than one instance sharing state — which is a different requirement from
+"data should survive a restart".
+
+---
+
 ## 2 · Local Docker
 
 ```bash

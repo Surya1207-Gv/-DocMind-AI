@@ -4,15 +4,19 @@ import json
 import shutil
 import uuid
 import secrets
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import List, Dict, Any, Optional
 from fastapi import FastAPI, UploadFile, File, HTTPException, BackgroundTasks, Depends, Request, status
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse, JSONResponse
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 
 from backend.config import (
+    DATA_DIR,
+    DATABASE_BACKEND,
+    DATABASE_URL,
+    DB_EXISTED_AT_BOOT,
     UPLOAD_DIR,
     BASE_DIR,
     FRONTEND_DIST_DIR,
@@ -24,11 +28,21 @@ from backend.config import (
     DEMO_SEED,
 )
 from backend.models import (
-    ChatRequest, ChatResponse, DocumentInfo, DocumentAnalytics, 
+    ChatMessage, ChatRequest, ChatResponse, DocumentInfo, DocumentAnalytics,
     QuizResponse, CompareRequest, CompareResponse,
     AgentQueryRequest, AgentQueryResponse
 )
+import requests.exceptions as requests_exceptions
+
 from backend.pdf_processor import process_pdf
+from backend.document_processor import (
+    SUPPORTED_EXTENSIONS,
+    DocumentExtractionError,
+    UnsupportedDocumentError,
+    detect_extension,
+    process_document,
+    process_url,
+)
 from backend.embedding_manager import create_and_save_index, delete_index
 from backend.chat_engine import run_chat_stream
 from backend.analytics_engine import analyze_document
@@ -40,6 +54,11 @@ from backend.agent_engine import run_agent_query, run_agent_stream
 from backend.auth import get_current_user, hash_password, verify_password, create_access_token
 import backend.database as db
 from backend.logger import get_logger, telemetry
+from backend.reranker import RERANKER as _RERANKER
+from backend.verification import (
+    EVIDENCE_GATE_ENABLED as _EVIDENCE_GATE_ENABLED,
+    VERIFICATION_ENABLED as _VERIFICATION_ENABLED,
+)
 from backend.config import FAISS_DIR
 
 logger = get_logger(__name__)
@@ -89,6 +108,22 @@ class TokenResponse(BaseModel):
     username: str
     email: Optional[str] = None
     full_name: Optional[str] = None
+
+# ---------------------------------------------------------------------------
+# Upload storage
+# ---------------------------------------------------------------------------
+# Files used to be stored unconditionally as "<doc_id>.pdf". Now that DOCX,
+# Markdown, text and HTML are ingested too, the stored name carries the real
+# extension and lookups glob for it. Existing "<doc_id>.pdf" files keep working
+# unchanged, so nothing that was already uploaded is orphaned.
+
+def stored_document_path(doc_id: str) -> Optional[str]:
+    """Path of the stored original for a document, or None if it is gone."""
+    import glob as _glob
+
+    matches = _glob.glob(os.path.join(UPLOAD_DIR, f"{doc_id}.*"))
+    return matches[0] if matches else None
+
 
 # --- Database Migration helper on Startup ---
 def migrate_metadata_json():
@@ -158,6 +193,38 @@ def migrate_metadata_json():
 migrate_metadata_json()
 
 
+# --- Persistence warnings ----------------------------------------------------
+@app.on_event("startup")
+def warn_about_ephemeral_state():
+    """
+    Say plainly, at boot, whether durable state will survive a restart.
+
+    This is not cosmetic. When DATA_DIR is not a mounted volume, the SQLite file
+    holding every user account is recreated empty on each deploy, and the
+    symptom users report is "registration works but I cannot log in again" --
+    which looks exactly like an authentication bug and is not one. Logging it
+    once at startup is what separates the two.
+    """
+    if DATABASE_URL:
+        logger.warning(
+            "[Startup] DATABASE_URL is set but this build stores everything in "
+            "SQLite under DATA_DIR (%s). Nothing is being written to that "
+            "database. See DEPLOY.md -> Persistence.",
+            DATA_DIR,
+        )
+
+    if not DB_EXISTED_AT_BOOT:
+        logger.warning(
+            "[Startup] No existing database found at %s - starting with an empty "
+            "one. If this happens on every deploy, DATA_DIR is ephemeral and "
+            "accounts, uploads and chat history will NOT survive a restart. "
+            "Attach a persistent disk mounted at DATA_DIR to fix it.",
+            DATA_DIR,
+        )
+    else:
+        logger.info("[Startup] Existing database found at %s.", DATA_DIR)
+
+
 # --- Optional demo seeding ---------------------------------------------------
 @app.on_event("startup")
 def seed_demo_on_startup():
@@ -197,7 +264,20 @@ def health_check():
         "database": "connected" if db_ok else "disconnected",
         "faiss_indices_writable": faiss_writable,
         "llm_provider": "configured" if llm_configured else "missing_api_key",
-        "time": datetime.utcnow().isoformat()
+        # Where durable state actually lives. Reported so an operator can see
+        # whether accounts and uploads will survive a restart, rather than
+        # discovering it when a user cannot log back in.
+        "storage": {
+            "backend": DATABASE_BACKEND,
+            "data_dir": DATA_DIR,
+            # False on a fresh container: the database was created by this boot,
+            # so anything written before it is gone.
+            "database_existed_at_boot": DB_EXISTED_AT_BOOT,
+            # True means someone attached a Postgres instance that this build
+            # cannot use. Their data is NOT going there.
+            "database_url_present_but_unused": bool(DATABASE_URL),
+        },
+        "time": datetime.now(timezone.utc).isoformat()
     }
 
 
@@ -206,12 +286,18 @@ def api_info():
     """Machine-readable service descriptor (the SPA is served from '/')."""
     return {
         "name": "DocMind AI",
-        "description": "Hybrid-retrieval RAG over your PDFs, with citations.",
+        "description": (
+            "Hybrid-retrieval RAG over your documents, with verified citations."
+        ),
+        "supported_formats": list(SUPPORTED_EXTENSIONS),
         "api_docs": "/docs",
         "health_check": "/api/health",
         "llm_model": LLM_MODEL,
         "embedding_model": EMBEDDING_MODEL,
         "top_k": TOP_K,
+        "reranker": _RERANKER,
+        "verification_enabled": _VERIFICATION_ENABLED,
+        "evidence_gate_enabled": _EVIDENCE_GATE_ENABLED,
     }
 
 # --- Auth Routes ---
@@ -231,17 +317,16 @@ def register_user(request: UserRegisterRequest):
     if not re.match(email_pattern, email):
         raise HTTPException(status_code=400, detail="Invalid email address structure.")
         
-    # Check if username exists
-    existing_uname = db.get_user_by_username(username)
-    if existing_uname:
-        raise HTTPException(status_code=400, detail="Username is already taken.")
-        
-    # Check if email exists
-    with db.get_db_connection() as conn:
-        existing_email = conn.execute("SELECT id FROM users WHERE email = ?;", (email,)).fetchone()
-        if existing_email:
-            raise HTTPException(status_code=400, detail="Email is already registered.")
-            
+    # Username and email collisions are both case-insensitive, matching how
+    # login resolves them. Registering "Surya" when "surya" exists must fail
+    # here rather than create a second account that neither user can log into.
+    if db.get_user_by_username(username):
+        raise HTTPException(status_code=409, detail="Username is already taken.")
+
+    if db.get_user_by_email(email):
+        raise HTTPException(status_code=409, detail="Email is already registered.")
+
+
     user_id = str(uuid.uuid4())
     hashed = hash_password(password)
     success = db.create_user(user_id, username, hashed, email, full_name)
@@ -263,15 +348,20 @@ def login_user(request: UserAuthRequest):
     username = request.username.strip()
     password = request.password.strip()
     
-    user = db.get_user_by_username(username)
+    # Accept either the username or the registered email, case-insensitively.
+    user = db.get_user_by_identifier(username)
     if not user or not verify_password(password, user["password_hash"]):
+        # One message for "no such user" and "wrong password" so the endpoint
+        # cannot be used to enumerate which accounts exist.
         raise HTTPException(status_code=401, detail="Invalid username or password.")
-        
+
     token = create_access_token({"sub": user["id"]})
     return TokenResponse(
         access_token=token,
         token_type="bearer",
-        username=username,
+        # Echo the stored casing, not what was typed, so the UI shows the real
+        # account name after a case-insensitive match.
+        username=user["username"],
         email=user["email"],
         full_name=user["full_name"]
     )
@@ -300,17 +390,16 @@ def update_current_user(request: UserUpdateRequest, current_user: dict = Depends
     if not (lower_email.endswith("@gmail.com") or lower_email.endswith("@google.com") or lower_email.endswith("@googlemail.com")):
         raise HTTPException(status_code=400, detail="Profile requires a Google email account (@gmail.com or @google.com).")
     
-    # Check if username exists on another user
+    # Same case-insensitive collision rules as registration.
     existing_uname = db.get_user_by_username(username)
     if existing_uname and existing_uname["id"] != current_user["id"]:
-        raise HTTPException(status_code=400, detail="Username is already taken.")
-        
-    # Check if email exists on another user
-    with db.get_db_connection() as conn:
-        existing_email = conn.execute("SELECT id FROM users WHERE email = ? AND id != ?;", (email, current_user["id"])).fetchone()
-        if existing_email:
-            raise HTTPException(status_code=400, detail="Email is already in use by another user.")
-            
+        raise HTTPException(status_code=409, detail="Username is already taken.")
+
+    existing_email = db.get_user_by_email(email)
+    if existing_email and existing_email["id"] != current_user["id"]:
+        raise HTTPException(status_code=409, detail="Email is already in use by another user.")
+
+
     pwd_hash = None
     if password:
         if len(password) < 4:
@@ -363,18 +452,24 @@ async def upload_document(
     file: UploadFile = File(...),
     current_user: dict = Depends(get_current_user)
 ):
-    if not file.filename.lower().endswith(".pdf"):
-        raise HTTPException(status_code=400, detail="Only PDF files are supported.")
-        
-    # Magic-byte check: verify binary starts with %PDF
-    header = await file.read(4)
+    # Format is decided from the filename AND the leading bytes, so a renamed
+    # file is rejected clearly rather than failing inside a parser.
+    header = await file.read(8)
     await file.seek(0)
-    if header != b"%PDF":
-        raise HTTPException(status_code=400, detail="Invalid PDF file format. File must start with '%PDF' header.")
-        
+    try:
+        extension = detect_extension(file.filename or "", header)
+    except UnsupportedDocumentError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+
+    if extension == ".pdf" and not header.startswith(b"%PDF"):
+        raise HTTPException(
+            status_code=400,
+            detail="Invalid PDF file format. File must start with a '%PDF' header.",
+        )
+
     doc_id = str(uuid.uuid4())
 
-    file_path = os.path.join(UPLOAD_DIR, f"{doc_id}.pdf")
+    file_path = os.path.join(UPLOAD_DIR, f"{doc_id}{extension}")
     
     # Save PDF locally
     try:
@@ -399,13 +494,23 @@ async def upload_document(
         raise HTTPException(status_code=400, detail="Uploaded file is empty.")
 
     try:
-        # Extract and chunk text
-        chunks = process_pdf(file_path, file.filename, doc_id)
+        # Extract and chunk text. Every format lands in the same representation,
+        # so embedding, retrieval and citation below are format-agnostic.
+        try:
+            chunks = process_document(file_path, file.filename, doc_id, extension=extension)
+        except (DocumentExtractionError, UnsupportedDocumentError) as exc:
+            if os.path.exists(file_path):
+                os.remove(file_path)
+            raise HTTPException(status_code=400, detail=str(exc))
+
         if not chunks:
             if os.path.exists(file_path):
                 os.remove(file_path)
-            raise HTTPException(status_code=400, detail="Failed to extract text from PDF. It might be scanned or empty.")
-            
+            raise HTTPException(
+                status_code=400,
+                detail="Failed to extract text from the file. It may be scanned, image-only, or empty.",
+            )
+
         page_count = max([c["metadata"].get("page", 1) for c in chunks])
         
         # Create FAISS Vector Index (using the optimized batching implementation)
@@ -470,20 +575,101 @@ async def upload_document(
             "analytics": analytics
         }
         
+    except HTTPException:
+        # Already a precise client-facing error (bad format, empty file); do not
+        # relabel it as a 500.
+        raise
     except Exception as e:
-        import traceback
-        traceback.print_exc()
+        logger.exception("Error processing upload %s", file.filename)
         if os.path.exists(file_path):
             os.remove(file_path)
-        raise HTTPException(status_code=500, detail=f"Error processing PDF: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Error processing document: {str(e)}")
+
+class UrlIngestRequest(BaseModel):
+    url: str
+    name: Optional[str] = None
+
+
+@app.post("/api/documents/from-url")
+def ingest_url(
+    request: UrlIngestRequest,
+    background_tasks: BackgroundTasks,
+    current_user: dict = Depends(get_current_user),
+):
+    """
+    Ingest a public web page as a document.
+
+    The extracted text is persisted next to uploaded files so a web source is a
+    first-class document: it can be selected, retrieved from, compared, deleted,
+    and re-chunked exactly like a PDF. The SSRF guard lives in
+    document_processor.fetch_url -- a user-supplied URL fetched by the server is
+    a request-forgery primitive unless it is constrained to public addresses.
+    """
+    url = (request.url or "").strip()
+    if not url:
+        raise HTTPException(status_code=400, detail="A URL is required.")
+
+    doc_id = str(uuid.uuid4())
+
+    try:
+        chunks, doc_name, plain_text = process_url(url, doc_id, request.name)
+    except (DocumentExtractionError, UnsupportedDocumentError, ValueError) as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+    except requests_exceptions.RequestException as exc:
+        raise HTTPException(status_code=502, detail=f"Could not fetch the URL: {exc}")
+
+    file_path = os.path.join(UPLOAD_DIR, f"{doc_id}.txt")
+    with open(file_path, "w", encoding="utf-8") as handle:
+        handle.write(plain_text)
+
+    file_size = os.path.getsize(file_path)
+    if file_size > MAX_UPLOAD_BYTES:
+        os.remove(file_path)
+        raise HTTPException(
+            status_code=413,
+            detail=f"Extracted page is larger than the {MAX_UPLOAD_MB} MB limit.",
+        )
+
+    try:
+        create_and_save_index(chunks, doc_id)
+    except Exception as exc:
+        os.remove(file_path)
+        logger.exception("Failed to index URL %s", url)
+        raise HTTPException(status_code=500, detail=f"Failed to index the page: {exc}")
+
+    page_count = max(c["metadata"].get("page", 1) for c in chunks)
+    word_count = len(plain_text.split())
+    upload_time_str = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+
+    db.add_document(doc_id, current_user["id"], doc_name, file_size, upload_time_str)
+    db.save_analytics(
+        doc_id=doc_id,
+        word_count=word_count,
+        page_count=page_count,
+        read_time_mins=max(1, round(word_count / 200)),
+        complexity_score="Medium",
+        summary=["Analyzing page content to extract key summaries..."],
+        entities=[],
+        alerts=[{"type": "insight", "content": f"Ingested from {url}", "page": 1}],
+        suggested_questions=["What is this page about?"],
+    )
+    background_tasks.add_task(background_analyze_task, chunks, doc_id, doc_name, page_count)
+
+    return {
+        "message": "Page ingested successfully. Analytics will populate in the background.",
+        "document": DocumentInfo(
+            id=doc_id, name=doc_name, size=file_size, upload_time=upload_time_str
+        ),
+        "source_url": url,
+    }
+
 
 @app.get("/api/documents", response_model=List[DocumentInfo])
 def list_documents(current_user: dict = Depends(get_current_user)):
     user_docs = db.list_documents(current_user["id"])
     docs = []
     for d in user_docs:
-        file_path = os.path.join(UPLOAD_DIR, f"{d['id']}.pdf")
-        if os.path.exists(file_path):
+        if stored_document_path(d["id"]):
             docs.append(DocumentInfo(**d))
     return docs
 
@@ -495,12 +681,12 @@ def delete_document(doc_id: str, current_user: dict = Depends(get_current_user))
         raise HTTPException(status_code=404, detail="Document not found.")
         
     # Delete file from disk
-    file_path = os.path.join(UPLOAD_DIR, f"{doc_id}.pdf")
-    if os.path.exists(file_path):
+    file_path = stored_document_path(doc_id)
+    if file_path and os.path.exists(file_path):
         try:
             os.remove(file_path)
         except Exception as e:
-            logger.error("Error removing PDF file: %s", e)
+            logger.error("Error removing stored document file: %s", e)
             
     # Delete FAISS vector index
     try:
@@ -513,6 +699,35 @@ def delete_document(doc_id: str, current_user: dict = Depends(get_current_user))
     
     return {"message": "Document deleted successfully"}
 
+def resolve_user_doc_ids(requested: List[str], user_id: str) -> List[str]:
+    """
+    Turn a requested document selection into a verified, user-scoped list.
+
+    Two jobs, and the second one is a security boundary:
+
+    1. Every explicitly requested id must belong to the caller, or the request
+       is rejected.
+    2. An EMPTY selection means "search everything I have" -- and it must mean
+       everything *this user* has. Previously an empty list was passed straight
+       through to search_index, whose own fallback is to load every index on
+       disk. That made a chat request with no document selected retrieve from
+       other users' documents and quote them back with citations.
+
+    Returning the caller's own ids (rather than an empty list) keeps the
+    "search all my documents" behaviour while closing that path.
+    """
+    if requested:
+        for doc_id in requested:
+            if not db.get_document(doc_id, user_id):
+                raise HTTPException(
+                    status_code=404,
+                    detail=f"Document ID {doc_id} not found or unauthorized.",
+                )
+        return list(requested)
+
+    return [doc["id"] for doc in db.list_documents(user_id)]
+
+
 # --- Protected Chat & Streaming Routes ---
 
 @app.post("/api/chat")
@@ -523,12 +738,11 @@ def chat_document(request: ChatRequest, current_user: dict = Depends(get_current
     if not request.question or not request.question.strip():
         raise HTTPException(status_code=400, detail="Question cannot be empty.")
 
-    # Verify ownership of target documents
-    for doc_id in request.doc_ids:
-        doc = db.get_document(doc_id, current_user["id"])
-        if not doc:
-            raise HTTPException(status_code=404, detail=f"Document ID {doc_id} not found or unauthorized.")
-            
+    # Verify ownership, and scope an empty selection to this user's own documents.
+    request = request.model_copy(
+        update={"doc_ids": resolve_user_doc_ids(request.doc_ids, current_user["id"])}
+    )
+
     try:
         # Return text/event-stream SSE chunk streams
         return StreamingResponse(
@@ -586,11 +800,13 @@ def get_document_quiz(doc_id: str, current_user: dict = Depends(get_current_user
     if cached:
         return QuizResponse(doc_id=doc_id, questions=cached)
         
-    file_path = os.path.join(UPLOAD_DIR, f"{doc_id}.pdf")
+    file_path = stored_document_path(doc_id)
     doc_name = doc["name"]
-    
+    if not file_path:
+        raise HTTPException(status_code=404, detail="Stored document file is no longer available.")
+
     try:
-        chunks = process_pdf(file_path, doc_name, doc_id)
+        chunks = process_document(file_path, doc_name, doc_id)
         questions = generate_document_quiz(chunks, doc_id)
         
         # Save to database cache
@@ -603,13 +819,15 @@ def get_document_quiz(doc_id: str, current_user: dict = Depends(get_current_user
 @app.post("/api/compare", response_model=CompareResponse)
 def compare_docs(request: CompareRequest, current_user: dict = Depends(get_current_user)):
     # Verify ownership of target documents
+    doc_ids = resolve_user_doc_ids(request.doc_ids, current_user["id"])
     documents_dict = {}
-    for doc_id in request.doc_ids:
+    for doc_id in doc_ids:
         doc = db.get_document(doc_id, current_user["id"])
-        if not doc:
-            raise HTTPException(status_code=404, detail=f"Document ID {doc_id} not found or unauthorized.")
-        documents_dict[doc_id] = doc
-            
+        if doc:
+            documents_dict[doc_id] = doc
+    request = request.model_copy(update={"doc_ids": doc_ids})
+
+
     try:
         response = compare_documents(request, documents_dict)
         return response
@@ -628,13 +846,11 @@ def agent_query_endpoint(request: AgentQueryRequest, current_user: dict = Depend
 
     if not request.question or not request.question.strip():
         raise HTTPException(status_code=400, detail="Question cannot be empty.")
-    for doc_id in request.doc_ids:
-        doc = db.get_document(doc_id, current_user["id"])
-        if not doc:
-            raise HTTPException(status_code=404, detail=f"Document ID {doc_id} not found or unauthorized.")
-            
+
+    doc_ids = resolve_user_doc_ids(request.doc_ids, current_user["id"])
+
     try:
-        result = run_agent_query(request.question, request.doc_ids, mode=request.mode)
+        result = run_agent_query(request.question, doc_ids, mode=request.mode)
         return AgentQueryResponse(
             answer=result["answer"],
             sub_queries=result["sub_queries"],
@@ -652,21 +868,118 @@ async def chat_agent_endpoint(request: ChatRequest, current_user: dict = Depends
     """
     Executes LangGraph multi-hop agent reasoning and streams intermediate steps and final answer over SSE.
     """
-    target_doc_ids = request.doc_ids if request.doc_ids else []
-    logger.info("[API Chat Agent Stream] User: %s | Query: '%s' | Docs: %s", current_user.get('username'), request.question, target_doc_ids)
-
     if not request.question or not request.question.strip():
         raise HTTPException(status_code=400, detail="Question cannot be empty.")
 
-    for d_id in target_doc_ids:
-        doc = db.get_document(d_id, current_user["id"])
-        if not doc:
-            raise HTTPException(status_code=404, detail=f"Document {d_id} not found or unauthorized.")
-        
+    target_doc_ids = resolve_user_doc_ids(request.doc_ids, current_user["id"])
+    logger.info(
+        "[API Chat Agent Stream] User: %s | Query: '%s' | Docs: %s",
+        current_user.get('username'), request.question, target_doc_ids,
+    )
+
+
     return StreamingResponse(
         run_agent_stream(request.question, target_doc_ids, mode=request.mode),
         media_type="text/event-stream"
     )
+
+
+@app.get("/api/documents/relationships")
+def document_relationships(current_user: dict = Depends(get_current_user)):
+    """
+    How the caller's documents relate to each other.
+
+    Computed from the FAISS vectors already on disk (see backend/relationships.py),
+    scoped strictly to this user's documents. Types: conflicting, duplicate,
+    possible-version-of, similar, related.
+    """
+    documents = db.list_documents(current_user["id"])
+    if len(documents) < 2:
+        return {"relationships": [], "document_count": len(documents)}
+
+    try:
+        from backend.embedding_manager import get_embeddings_model
+        from backend.relationships import detect_relationships
+
+        relationships = detect_relationships(documents, get_embeddings_model())
+    except Exception as exc:
+        logger.exception("Relationship detection failed")
+        raise HTTPException(status_code=500, detail=f"Could not compute relationships: {exc}")
+
+    return {"relationships": relationships, "document_count": len(documents)}
+
+
+class RagTraceRequest(BaseModel):
+    question: str
+    doc_ids: List[str] = Field(default_factory=list)
+    history: List[ChatMessage] = Field(default_factory=list)
+    top_k: int = 5
+
+
+@app.post("/api/rag/trace")
+def rag_trace(request: RagTraceRequest, current_user: dict = Depends(get_current_user)):
+    """
+    Developer view of the retrieval half of the pipeline, without generating.
+
+    Shows the original query, how it was rewritten, every retrieval leg, the
+    fused candidates, the reranked order and the finally selected evidence --
+    so a bad answer can be attributed to retrieval or to generation instead of
+    guessed at. Skipping the LLM keeps it fast and free to run repeatedly.
+
+    Generation-stage trace (claims, verification, confidence, gating) comes from
+    POST /api/chat with `"trace": true`.
+    """
+    question = (request.question or "").strip()
+    if not question:
+        raise HTTPException(status_code=400, detail="Question cannot be empty.")
+
+    doc_ids = resolve_user_doc_ids(request.doc_ids, current_user["id"])
+
+    from backend.chat_engine import _retrieve_evidence, get_llm_model
+    from backend.query_rewriter import rewrite_query
+    from backend.reranker import RERANKER
+    from backend.verification import detect_contradictions
+
+    try:
+        rewrite = rewrite_query(
+            question,
+            request.history,
+            llm=get_llm_model() if request.history else None,
+        )
+    except Exception as exc:
+        logger.warning("Trace rewrite failed: %s", exc)
+        rewrite = None
+
+    queries = rewrite.all_queries if rewrite else [question]
+    results, retrieval_trace = _retrieve_evidence(queries, doc_ids, request.top_k)
+
+    evidence = [
+        {
+            "text": doc.page_content,
+            "doc_id": (doc.metadata or {}).get("doc_id"),
+            "doc_name": (doc.metadata or {}).get("doc_name"),
+            "page": (doc.metadata or {}).get("page"),
+        }
+        for doc, _ in results
+    ]
+
+    return {
+        "original_query": question,
+        "rewrite": rewrite.to_dict() if rewrite else None,
+        "reranker": RERANKER,
+        "retrieval": retrieval_trace,
+        "evidence": [
+            {
+                **item,
+                "page_end": (doc.metadata or {}).get("page_end"),
+                "section": (doc.metadata or {}).get("section"),
+                "relevance": round(max(0.0, min(1.0, 1.0 - (score / 2.0))) * 100, 1),
+                "preview": doc.page_content[:400],
+            }
+            for item, (doc, score) in zip(evidence, results)
+        ],
+        "contradictions": detect_contradictions(evidence),
+    }
 
 
 @app.get("/api/telemetry")

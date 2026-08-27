@@ -22,7 +22,8 @@ def test_register_duplicate_username(client):
         "full_name": "Admin Two"
     }
     resp = client.post("/api/auth/register", json=payload)
-    assert resp.status_code == 400
+    # 409 Conflict: the request is well-formed, it collides with existing state.
+    assert resp.status_code == 409
     assert "taken" in resp.json()["detail"].lower()
 
 def test_register_invalid_email(client):

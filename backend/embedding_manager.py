@@ -2,7 +2,7 @@ import os
 import shutil
 import re
 import time
-from typing import List, Dict, Any, Tuple
+from typing import List, Dict, Any, Optional, Tuple
 from langchain_community.vectorstores import FAISS
 import requests
 from langchain_core.embeddings import Embeddings
@@ -14,6 +14,8 @@ from backend.config import (
     VECTOR_WEIGHT,
 )
 from backend.logger import get_logger, log_rag_retrieval_event
+from backend.reranker import rerank
+from backend.text_utils import STOP_WORDS, tokenize
 
 logger = get_logger(__name__)
 
@@ -120,40 +122,19 @@ class SimpleBM25:
         self.k1 = 1.5
         self.b = 0.75
         
-        self.stop_words = {
-            "the", "a", "an", "and", "or", "but", "in", "on", "at", "to", "for", "of", "with", "by", "about", 
-            "against", "between", "into", "through", "during", "before", "after", "above", "below", "from", 
-            "up", "down", "in", "out", "on", "off", "over", "under", "again", "further", "then", "once", 
-            "here", "there", "when", "where", "why", "how", "all", "any", "both", "each", "few", "more", 
-            "most", "other", "some", "such", "no", "nor", "not", "only", "own", "same", "so", "than", "too", 
-            "very", "s", "t", "can", "will", "just", "don", "should", "now", "i", "me", "my", "myself", 
-            "we", "our", "ours", "ourselves", "you", "your", "yours", "yourself", "yourselves", "he", "him", 
-            "his", "himself", "she", "her", "hers", "herself", "it", "its", "itself", "they", "them", 
-            "their", "theirs", "themselves", "what", "which", "who", "whom", "this", "that", "these", "those", 
-            "am", "is", "are", "was", "were", "be", "been", "being", "have", "has", "had", "having", "do", 
-            "does", "did", "doing", "would", "should", "could"
-        }
-        
+        # Shared with claim verification (backend/text_utils.py) so retrieval and
+        # grounding agree on what a "term" is. The previous private tokenizer
+        # matched only ASCII letters and digits, so every Devanagari and Telugu
+        # token was discarded and BM25 scored 0.0 for any non-Latin query --
+        # hybrid search silently degraded to vector-only for those languages.
+        self.stop_words = STOP_WORDS
+
         if self.corpus_size == 0:
             return
-            
-        def clean_text_to_words(text: str) -> List[str]:
-            words = []
-            for w in text.split():
-                w_clean = w.strip(string.punctuation)
-                if not w_clean:
-                    continue
-                # Split camelCase/PascalCase/merged words
-                parts = re.findall(r'[A-Z]+(?=[A-Z][a-z]|\b)|[A-Z]?[a-z]+|[0-9]+', w_clean)
-                if parts:
-                    words.extend([p.lower() for p in parts])
-                else:
-                    words.append(w_clean.lower())
-            return [w for w in words if w and w not in self.stop_words]
-            
+
         total_len = 0
         for doc in corpus:
-            words = clean_text_to_words(doc)
+            words = tokenize(doc)
             total_len += len(words)
             self.doc_lens.append(len(words))
             
@@ -178,20 +159,7 @@ class SimpleBM25:
         if self.corpus_size == 0 or doc_index >= self.corpus_size:
             return 0.0
             
-        def clean_text_to_words(text: str) -> List[str]:
-            words = []
-            for w in text.split():
-                w_clean = w.strip(string.punctuation)
-                if not w_clean:
-                    continue
-                parts = re.findall(r'[A-Z]+(?=[A-Z][a-z]|\b)|[A-Z]?[a-z]+|[0-9]+', w_clean)
-                if parts:
-                    words.extend([p.lower() for p in parts])
-                else:
-                    words.append(w_clean.lower())
-            return [w for w in words if w and w not in self.stop_words]
-            
-        query_words = clean_text_to_words(query)
+        query_words = tokenize(query)
         score = 0.0
         doc_len = self.doc_lens[doc_index]
         tf = self.doc_term_freqs[doc_index]
@@ -211,7 +179,7 @@ class SimpleBM25:
 
 def search_index(
     query: str,
-    doc_ids: List[str],
+    doc_ids: Optional[List[str]],
     top_k: int = 4,
     use_vector: bool = True,
     use_bm25: bool = True,
@@ -220,6 +188,9 @@ def search_index(
     boost_proximity: bool = True,
     boost_header: bool = True,
     relevance_threshold: float = None,
+    use_rerank: bool = True,
+    rerank_llm: Any = None,
+    trace: Dict[str, Any] = None,
 ) -> List[Tuple[Any, float]]:
     """
     Searches across specified doc_ids by loading and merging their FAISS indices.
@@ -231,13 +202,24 @@ def search_index(
 
     embeddings = get_embeddings_model()
     
-    # Identify which doc IDs to load
-    target_ids = doc_ids
-    if not target_ids:
-        # Load all folders in FAISS_DIR
-        if os.path.exists(FAISS_DIR):
-            target_ids = [d for d in os.listdir(FAISS_DIR) if os.path.isdir(os.path.join(FAISS_DIR, d))]
-            
+    # Identify which doc IDs to load.
+    #
+    # An empty list means "no documents selected" and returns nothing. Only an
+    # explicit None means "every index on disk" -- a facility kept for offline
+    # benchmarking scripts, never reachable from a request. The two used to be
+    # the same case, so an authenticated chat with no document selected fell
+    # through to loading every user's indices and answering from them. Defence
+    # in depth: the API layer also resolves an empty selection to the caller's
+    # own documents before it gets here.
+    if doc_ids is None:
+        target_ids = (
+            [d for d in os.listdir(FAISS_DIR) if os.path.isdir(os.path.join(FAISS_DIR, d))]
+            if os.path.exists(FAISS_DIR)
+            else []
+        )
+    else:
+        target_ids = list(doc_ids)
+
     if not target_ids:
         return []
         
@@ -312,7 +294,17 @@ def search_index(
         bm25_normalized = (bm25_scores[i] / max_bm25) if max_bm25 > 0.0 else 0.0
         
         # Compute base score depending on active retrieval components
-        if use_vector and use_bm25:
+        if use_vector and use_bm25 and max_bm25 <= 0.0:
+            # BM25 matched nothing anywhere in the candidate set, so it has no
+            # opinion to contribute. Still blending it in would multiply every
+            # score by VECTOR_WEIGHT (0.6) uniformly -- not a re-ranking, just a
+            # flat penalty that pushes genuine matches under the relevance
+            # threshold. It bites hardest cross-lingually: a Hindi query against
+            # an English document shares no surface forms by construction, so a
+            # correct 0.925 vector match was being scored 0.555 and then
+            # discarded. When the lexical stage abstains, defer to the vector.
+            hybrid_score = vector_sim
+        elif use_vector and use_bm25:
             hybrid_score = VECTOR_WEIGHT * vector_sim + (1.0 - VECTOR_WEIGHT) * bm25_normalized
         elif use_vector and not use_bm25:
             hybrid_score = vector_sim
@@ -371,6 +363,26 @@ def search_index(
         
     # Sort candidates by combined hybrid score descending
     scored_candidates.sort(key=lambda x: x[2], reverse=True)
+
+    # --- Second-stage reranking -------------------------------------------
+    # Fusion above is a recall stage: it decides which ~15 passages are worth
+    # considering at all. Reranking is a precision stage over that shortlist,
+    # scoring each passage on whether it actually answers the question rather
+    # than on how topically close it is. See backend/reranker.py for why this
+    # is lexical rather than a cross-encoder.
+    t_rerank_start = time.perf_counter()
+    reranked = []
+    if use_rerank:
+        reranked = rerank(
+            query,
+            [(doc, hybrid) for doc, _dist, hybrid in scored_candidates],
+            llm=rerank_llm,
+        )
+        scored_candidates = [
+            (c.document, 2.0 * (1.0 - c.final_score), c.final_score)
+            for c in reranked
+        ]
+    rerank_ms = (time.perf_counter() - t_rerank_start) * 1000.0
     
     # Return formatted list matching (Document, score) where score is translated back 
     # to simulated L2 distance matching the hybrid score (for downstream confidence scores)
@@ -390,7 +402,8 @@ def search_index(
 
         
         expanded_content = doc.page_content
-        
+        expanded_metadata = dict(doc.metadata)
+
         # Pull next adjacent chunk to make context cohesive and complete sentences
         if doc_id and chunk_idx is not None:
             next_idx = chunk_idx + 1
@@ -403,9 +416,18 @@ def search_index(
                 sep = "\n" if not expanded_content.endswith("\n") else ""
                 expanded_content += sep + next_chunk.page_content
                 seen_chunks.add((doc_id, next_idx))
-                
+                # Chunk indices run across the whole document, so the adjacent
+                # chunk can sit on the following page. Without recording that,
+                # the citation reads "Page 5" while quoting text from page 6 --
+                # sending the reader to a page that does not contain the quote.
+                next_page = next_chunk.metadata.get("page")
+                this_page = expanded_metadata.get("page")
+                if next_page is not None and this_page is not None and next_page != this_page:
+                    expanded_metadata["page_end"] = next_page
+                expanded_metadata["expanded_with_adjacent_chunk"] = True
+
         from langchain_core.documents import Document
-        expanded_doc = Document(page_content=expanded_content, metadata=doc.metadata)
+        expanded_doc = Document(page_content=expanded_content, metadata=expanded_metadata)
         
         simulated_distance = 2.0 * (1.0 - hybrid_score)
         final_results.append((expanded_doc, simulated_distance))
@@ -421,7 +443,36 @@ def search_index(
         bm25_ms=bm25_ms,
         boost_applied=boost_type
     )
-        
+
+    # Optional developer trace, populated in place so the caller can surface the
+    # whole retrieval stage without this function needing a second return value
+    # or a parallel code path.
+    if trace is not None:
+        trace.update({
+            "query": query,
+            "doc_ids": list(target_ids),
+            "candidates": len(candidates),
+            "passed_threshold": len(final_results),
+            "relevance_threshold": relevance_threshold,
+            "top_score": round(top_score, 4),
+            "vector_ms": round(vector_ms, 2),
+            "bm25_ms": round(bm25_ms, 2),
+            "rerank_ms": round(rerank_ms, 2),
+            "reranked": bool(reranked),
+            "boost_applied": boost_type or "none",
+            "ranked": [c.to_trace() for c in reranked[:10]],
+            "selected": [
+                {
+                    "doc_name": d.metadata.get("doc_name"),
+                    "page": d.metadata.get("page"),
+                    "page_end": d.metadata.get("page_end"),
+                    "chunk_index": d.metadata.get("chunk_index"),
+                    "score": round(1.0 - (dist / 2.0), 4),
+                }
+                for d, dist in final_results
+            ],
+        })
+
     return final_results
 
 

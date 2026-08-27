@@ -80,7 +80,16 @@ export default function MessageBubble({ message }) {
               Retrieved context &mdash; the answer above was generated only from these passages
             </div>
             {message.sources.map((source, idx) => (
-              <SourceCard key={idx} source={source} />
+              // When a turn drew on more than one document, "Page 7" alone is
+              // ambiguous -- the reader cannot tell which document to open. Name
+              // the document on the collapsed tag in that case.
+              <SourceCard
+                key={idx}
+                source={source}
+                showDocName={
+                  new Set(message.sources.map((s) => s.doc_id)).size > 1
+                }
+              />
             ))}
           </div>
         )}

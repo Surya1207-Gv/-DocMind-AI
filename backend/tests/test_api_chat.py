@@ -47,7 +47,7 @@ def test_chat_success(mock_search, client, auth_headers, mock_document):
     assert "done" in content
 
 @patch("backend.main.generate_document_quiz")
-@patch("backend.main.process_pdf")
+@patch("backend.main.process_document")
 def test_quiz_generation(mock_process, mock_gen_quiz, client, auth_headers, mock_document):
     # Setup mock quiz questions
     mock_process.return_value = [{"text": "text chunk", "metadata": {"page": 1}}]

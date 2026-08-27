@@ -49,6 +49,25 @@ DB_FILE = os.getenv("DB_FILE") or os.path.join(DATA_DIR, "docmind.db")
 os.makedirs(UPLOAD_DIR, exist_ok=True)
 os.makedirs(FAISS_DIR, exist_ok=True)
 
+# --- Persistence awareness --------------------------------------------------
+# ALL durable state -- user accounts, uploaded files, FAISS indices, chat
+# history, analytics and quizzes -- lives under DATA_DIR. If DATA_DIR is not a
+# mounted volume, every one of those is lost when the container is replaced,
+# which on Render's free plan happens whenever the instance sleeps. That is the
+# real cause behind "I registered yesterday and cannot log in today": the
+# account was not overwritten, the database file no longer exists.
+#
+# Recorded at import so /api/health can report it honestly instead of leaving
+# operators to infer it.
+DB_EXISTED_AT_BOOT = os.path.isfile(DB_FILE)
+
+# Set automatically by Render when a Postgres instance is attached. This
+# application has no Postgres support (see DEPLOY.md, "Persistence"), so the
+# variable being present means someone believes their data is being persisted
+# to a database that is not being written to. Surfaced rather than ignored.
+DATABASE_URL = os.getenv("DATABASE_URL")
+DATABASE_BACKEND = "sqlite"
+
 # Directory holding the compiled React SPA. Served by FastAPI in production so
 # the whole app is a single origin (no CORS, one deployable service).
 FRONTEND_DIST_DIR = os.path.abspath(

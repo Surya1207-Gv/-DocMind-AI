@@ -11,6 +11,8 @@ export default function Sidebar({
   onUploadSuccess,
   onUploadError,
   activeChats = [],
+  includedDocIds = [],
+  onToggleIncludedDoc,
 }) {
   const formatBytes = (bytes, decimals = 2) => {
     if (bytes === 0) return "0 Bytes";
@@ -39,13 +41,44 @@ export default function Sidebar({
               No documents uploaded yet.
             </div>
           ) : (
-            documents.map((doc) => (
+            documents.map((doc) => {
+              const isAnchor = activeDocId === doc.id;
+              // The anchor is always part of the search, so its box is checked
+              // and disabled rather than hidden -- an empty box next to the open
+              // document would read as "this one is excluded".
+              const isSearched = isAnchor || includedDocIds.includes(doc.id);
+              return (
               <div
                 key={doc.id}
-                className={`doc-item ${activeDocId === doc.id ? "active" : ""}`}
+                className={`doc-item ${isAnchor ? "active" : ""}`}
                 onClick={() => setActiveDocId(doc.id)}
               >
                 <div className="doc-info">
+                  <input
+                    type="checkbox"
+                    className="doc-select-checkbox"
+                    checked={isSearched}
+                    disabled={isAnchor || !activeDocId}
+                    aria-label={
+                      isAnchor
+                        ? `${doc.name} (open document, always searched)`
+                        : `Also search ${doc.name}`
+                    }
+                    title={
+                      !activeDocId
+                        ? "Open a document first, then add others to the same chat"
+                        : isAnchor
+                        ? "The open document is always searched"
+                        : "Include this document in the current chat"
+                    }
+                    // Toggling inclusion must not also switch which conversation
+                    // is open -- those are different intents on the same row.
+                    onClick={(e) => e.stopPropagation()}
+                    onChange={(e) => {
+                      e.stopPropagation();
+                      if (onToggleIncludedDoc) onToggleIncludedDoc(doc.id);
+                    }}
+                  />
                   <span style={{ fontSize: "16px" }}>📄</span>
                   <div style={{ display: "flex", flexDirection: "column", overflow: "hidden" }}>
                     <span className="doc-name" title={doc.name}>
@@ -65,7 +98,8 @@ export default function Sidebar({
                   🗑️
                 </button>
               </div>
-            ))
+              );
+            })
           )}
         </div>
 

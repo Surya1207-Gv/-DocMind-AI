@@ -6,7 +6,10 @@
 # requirements-dev.txt and are deliberately kept out of the production image.
 
 # --- Web framework ---
-fastapi==0.110.0
+# 0.115.x pulls starlette>=0.40, whose TestClient works with httpx 0.28 (the
+# version google-genai requires). Pinning fastapi 0.110 broke the whole API test
+# suite with `TypeError: Client.__init__() got an unexpected keyword 'app'`.
+fastapi==0.115.14
 uvicorn[standard]==0.28.0
 python-multipart==0.0.9          # multipart/form-data parsing for PDF uploads
 pydantic==2.13.4

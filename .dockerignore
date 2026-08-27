@@ -21,7 +21,9 @@ coverage.xml
 htmlcov
 backend/venv
 venv
-.venv
+# Glob, not a literal: a bare `.venv` misses `.venv-test`, `.venv311` and
+# friends, each of which is hundreds of MB of build context for nothing.
+.venv*
 
 # Node / build output (the image builds the SPA itself in stage 1)
 node_modules

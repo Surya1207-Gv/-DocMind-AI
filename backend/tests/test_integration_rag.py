@@ -68,11 +68,18 @@ def test_confidence_score_calculation(mock_chat_genai, mock_search):
     
     req = ChatRequest(question="What is the fact?", doc_ids=["d1"], history=[], mode="qa")
     res = collect_stream_result(run_chat_stream(req, "test_user_id"))
-    
-    # Confidence: (1.0 - (0.4 / 2.0)) * 100 = 80%
-    assert res["confidence"] == 80
+
+    # Confidence is no longer the retrieval score alone. It blends retrieval
+    # strength with whether the answer's claims are actually found in the
+    # evidence, so the assertion is on the resulting band rather than on one
+    # exact number produced by a single formula.
+    assert res["metadata"]["confidence_band"] == "high"
+    assert res["confidence"] >= 75
     assert res["confidence_label"] == "High"
     assert len(res["sources"]) == 1
+    # The answer restates the evidence verbatim, so every claim is grounded.
+    assert res["metadata"]["verification"]["supported_ratio"] == 1.0
+    assert res["metadata"]["evidence_gated"] is False
 
 @patch("backend.chat_engine.search_index")
 @patch("langchain_google_genai.ChatGoogleGenerativeAI")
@@ -92,9 +99,12 @@ def test_fallback_phrase_rejection(mock_chat_genai, mock_search):
     req = ChatRequest(question="Secret question?", doc_ids=["d1"], history=[], mode="qa")
     res = collect_stream_result(run_chat_stream(req, "test_user_id"))
     
-    # Response should have 0 confidence and empty sources lists
+    # A refusal is grounded but uninformative: confidence in the ANSWER is zero,
+    # and no citations are shown for an answer that was never given.
     assert res["confidence"] == 0
     assert res["confidence_label"] == "Low"
+    assert res["metadata"]["confidence_band"] == "very_low"
+    assert res["metadata"]["verification"]["is_refusal"] is True
     assert len(res["sources"]) == 0
 
 @patch("langchain_google_genai.ChatGoogleGenerativeAI")

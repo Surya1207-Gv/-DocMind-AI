@@ -8,6 +8,8 @@ import ProfileSection from "./ProfileSection";
 export default function ChatWindow({
   messages,
   activeDoc,
+  selectedDocs = [],
+  onRemoveIncludedDoc,
   activeMode,
   onChangeMode,
   onSendMessage,
@@ -24,6 +26,10 @@ export default function ChatWindow({
 }) {
   const [input, setInput] = useState("");
   const messagesEndRef = useRef(null);
+
+  // selectedDocs[0] is the anchor (the open document); anything beyond it was
+  // explicitly added to this conversation.
+  const extraDocs = selectedDocs.slice(1);
 
   // Auto-scroll to bottom on new messages
   useEffect(() => {
@@ -55,9 +61,37 @@ export default function ChatWindow({
           </div>
           <span className="header-subtitle">
             {activeDoc
-              ? "Querying selected document"
+              ? extraDocs.length > 0
+                ? `Querying ${selectedDocs.length} documents`
+                : "Querying selected document"
               : "Upload documents and start asking questions"}
           </span>
+          {/* Which documents this question will actually search. Without this
+              the only signal is a checkbox in the sidebar, and an answer citing
+              a document the user forgot they had included looks like a bug. */}
+          {extraDocs.length > 0 && (
+            <div className="selected-docs-bar" data-testid="selected-docs-bar">
+              {selectedDocs.map((doc, index) => (
+                <span
+                  key={doc.id}
+                  className={`selected-doc-chip ${index === 0 ? "anchor" : ""}`}
+                  title={index === 0 ? `${doc.name} (open document)` : doc.name}
+                >
+                  {doc.name}
+                  {index > 0 && onRemoveIncludedDoc && (
+                    <button
+                      type="button"
+                      className="selected-doc-remove"
+                      aria-label={`Remove ${doc.name} from this chat`}
+                      onClick={() => onRemoveIncludedDoc(doc.id)}
+                    >
+                      ×
+                    </button>
+                  )}
+                </span>
+              ))}
+            </div>
+          )}
         </div>
 
         <div className="header-actions-container" style={{ display: "flex", alignItems: "center", gap: "12px" }}>

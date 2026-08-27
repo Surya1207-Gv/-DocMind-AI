@@ -7,11 +7,11 @@ def test_list_documents_empty(client, auth_headers):
     assert resp.status_code == 200
     assert resp.json() == []
 
-@patch("backend.main.process_pdf")
+@patch("backend.main.process_document")
 @patch("backend.main.create_and_save_index")
-def test_upload_document_success(mock_create_index, mock_process_pdf, client, auth_headers):
+def test_upload_document_success(mock_create_index, mock_process_document, client, auth_headers):
     # Setup mock chunks
-    mock_process_pdf.return_value = [
+    mock_process_document.return_value = [
         {"text": "Chunk 1", "metadata": {"page": 1, "doc_id": "test_id", "doc_name": "test.pdf", "chunk_index": 0}}
     ]
     mock_create_index.return_value = "/path/to/faiss/index"
@@ -33,12 +33,42 @@ def test_upload_document_success(mock_create_index, mock_process_pdf, client, au
     assert len(docs) == 1
     assert docs[0]["name"] == "test.pdf"
 
-def test_upload_document_non_pdf(client, auth_headers):
-    file_content = b"plain text content"
-    files = {"file": ("test.txt", file_content, "text/plain")}
+def test_upload_rejects_unsupported_format(client, auth_headers):
+    """An extension with no extractor is refused with a clear 400, not a 500."""
+    files = {"file": ("payload.exe", b"MZ-not-a-document", "application/octet-stream")}
     resp = client.post("/api/upload", files=files, headers=auth_headers)
     assert resp.status_code == 400
-    assert "only pdf files are supported" in resp.json()["detail"].lower()
+    assert "unsupported file type" in resp.json()["detail"].lower()
+
+
+def test_upload_rejects_pdf_with_wrong_magic_bytes(client, auth_headers):
+    """A .pdf that does not start with %PDF is rejected before reaching the parser."""
+    files = {"file": ("fake.pdf", b"not really a pdf at all", "application/pdf")}
+    resp = client.post("/api/upload", files=files, headers=auth_headers)
+    assert resp.status_code == 400
+    assert "%pdf" in resp.json()["detail"].lower()
+
+
+@patch("backend.main.create_and_save_index")
+def test_upload_markdown_is_ingested(mock_create_index, client, auth_headers):
+    """Markdown now goes through the same ingest path as PDF (Phase 5)."""
+    mock_create_index.return_value = "/path/to/faiss/index"
+    content = "\n".join([
+        "# Authentication Policy",
+        "",
+        "All administrative accounts must use multi-factor authentication.",
+        "",
+        "## Retention",
+        "",
+        "Audit logs are retained for 30 days.",
+    ]).encode("utf-8")
+    files = {"file": ("policy.md", content, "text/markdown")}
+    resp = client.post("/api/upload", files=files, headers=auth_headers)
+    assert resp.status_code == 200, resp.text
+    assert resp.json()["document"]["name"] == "policy.md"
+
+    listed = client.get("/api/documents", headers=auth_headers).json()
+    assert [d["name"] for d in listed] == ["policy.md"]
 
 @patch("backend.main.delete_index")
 def test_delete_document_success(mock_delete_index, client, auth_headers):

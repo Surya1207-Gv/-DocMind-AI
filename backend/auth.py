@@ -1,5 +1,5 @@
 import os
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from typing import Optional
 import jwt
 import bcrypt
@@ -28,22 +28,35 @@ ACCESS_TOKEN_EXPIRE_MINUTES = 1440  # 24 hours
 
 security_scheme = HTTPBearer()
 
+# bcrypt only ever reads the first 72 bytes of a password. Older releases
+# truncated silently, bcrypt >= 5 raises instead -- so a password longer than
+# that would hash fine on one version and fail to verify on another, locking a
+# real user out of their own account. Truncate explicitly and identically in
+# both directions so the behaviour never depends on the installed bcrypt.
+BCRYPT_MAX_BYTES = 72
+
+
+def _password_bytes(password: str) -> bytes:
+    return password.encode("utf-8")[:BCRYPT_MAX_BYTES]
+
+
 def hash_password(password: str) -> str:
-    pwd_bytes = password.encode('utf-8')
     salt = bcrypt.gensalt()
-    return bcrypt.hashpw(pwd_bytes, salt).decode('utf-8')
+    return bcrypt.hashpw(_password_bytes(password), salt).decode('utf-8')
 
 def verify_password(plain_password: str, hashed_password: str) -> bool:
-    pwd_bytes = plain_password.encode('utf-8')
-    hashed_bytes = hashed_password.encode('utf-8')
-    return bcrypt.checkpw(pwd_bytes, hashed_bytes)
+    if not plain_password or not hashed_password:
+        return False
+    try:
+        return bcrypt.checkpw(_password_bytes(plain_password), hashed_password.encode('utf-8'))
+    except (ValueError, TypeError):
+        # Malformed/legacy hash in the row -- treat as a failed login, never a 500.
+        return False
 
 def create_access_token(data: dict, expires_delta: Optional[timedelta] = None) -> str:
     to_encode = data.copy()
-    if expires_delta:
-        expire = datetime.utcnow() + expires_delta
-    else:
-        expire = datetime.utcnow() + timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
+    now = datetime.now(timezone.utc)
+    expire = now + (expires_delta if expires_delta else timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES))
     to_encode.update({"exp": expire})
     encoded_jwt = jwt.encode(to_encode, SECRET_KEY, algorithm=ALGORITHM)
     return encoded_jwt

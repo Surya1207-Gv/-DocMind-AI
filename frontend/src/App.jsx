@@ -7,6 +7,7 @@ import CompareMode from "./components/CompareMode";
 import ParticleBackground from "./components/ParticleBackground";
 import LandingPage from "./components/LandingPage";
 import { documentApi, chatApi, authApi, API_BASE, DEMO_CREDENTIALS } from "./api";
+import { buildChatDocIds, resolveSelectedDocs } from "./utils/docSelection";
 import ProfileSection from "./components/ProfileSection";
 import "./App.css"; // Auth-specific styling overrides
 
@@ -17,6 +18,12 @@ export default function App() {
   const [fullName, setFullName] = useState(localStorage.getItem("fullName") || "");
   const [documents, setDocuments] = useState([]);
   const [activeDocId, setActiveDocId] = useState(null);
+  // Extra documents searched alongside the active one. activeDocId stays the
+  // conversation anchor -- it is what chat history, analytics and the export
+  // filename are keyed by, and it is always sent FIRST to /api/chat because the
+  // backend persists a turn under doc_ids[0]. Adding a parallel "multi-doc
+  // chat" mode would have meant a second chat architecture; this keeps one.
+  const [includedDocIds, setIncludedDocIds] = useState([]);
   const [analytics, setAnalytics] = useState(null);
   
   // Tab control for context panel: "analytics" | "quiz" | "compare"
@@ -233,6 +240,35 @@ export default function App() {
   useEffect(() => {
     loadDocuments();
   }, [token]);
+
+  // Switching the anchor document starts a different conversation, so the extra
+  // documents chosen for the previous one no longer apply.
+  useEffect(() => {
+    setIncludedDocIds([]);
+  }, [activeDocId]);
+
+  // Drop any included document that has been deleted, so a stale id is never
+  // sent to /api/chat (the backend would reject the whole request with a 404).
+  useEffect(() => {
+    setIncludedDocIds((prev) => {
+      const live = prev.filter((id) => documents.some((doc) => doc.id === id));
+      return live.length === prev.length ? prev : live;
+    });
+  }, [documents]);
+
+  const toggleIncludedDoc = (docId) => {
+    // The anchor is always searched; it cannot be toggled off from here.
+    if (docId === activeDocId) return;
+    setIncludedDocIds((prev) =>
+      prev.includes(docId) ? prev.filter((id) => id !== docId) : [...prev, docId]
+    );
+  };
+
+  // Every document this conversation searches, anchor first. Derived rather than
+  // stored so it can never drift out of sync with activeDocId. See
+  // utils/docSelection.js for why the ordering and the ownership filter matter.
+  const chatDocIds = buildChatDocIds(activeDocId, includedDocIds, documents);
+  const selectedDocs = resolveSelectedDocs(chatDocIds, documents);
 
   // Fetch document analytics + persistent chat history when active document changes
   useEffect(() => {
@@ -537,7 +573,10 @@ export default function App() {
         },
         body: JSON.stringify({
           question: text,
-          doc_ids: [activeDocId],
+          // Anchor first: the backend keys the persisted turn on doc_ids[0], so
+          // this keeps history filed under the same conversation whether one
+          // document is selected or several.
+          doc_ids: chatDocIds,
           history: formattedHistory,
           mode: activeMode,
         }),
@@ -794,6 +833,8 @@ export default function App() {
         documents={documents}
         activeDocId={activeDocId}
         setActiveDocId={setActiveDocId}
+        includedDocIds={includedDocIds}
+        onToggleIncludedDoc={toggleIncludedDoc}
         onDeleteDoc={handleDeleteDoc}
         onDeleteChat={handleDeleteChat}
         onUploadStart={handleUploadStart}
@@ -810,6 +851,8 @@ export default function App() {
       <ChatWindow
         messages={currentMessages}
         activeDoc={activeDoc}
+        selectedDocs={selectedDocs}
+        onRemoveIncludedDoc={toggleIncludedDoc}
         activeMode={activeMode}
         onChangeMode={setActiveMode}
         onSendMessage={handleSendMessage}

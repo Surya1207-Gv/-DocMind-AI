@@ -124,9 +124,44 @@ def create_user(user_id: str, username: str, password_hash: str, email: str = No
         return False
 
 def get_user_by_username(username: str) -> Optional[Dict[str, Any]]:
+    """
+    Look a user up by username, case-insensitively.
+
+    Accounts are stored with the casing the user typed at registration, but
+    people do not retype it consistently -- someone who registered as "Surya"
+    types "surya" a week later. An exact-match lookup turned that into
+    "invalid username or password" on an account that plainly exists, which is
+    the reported "registration works but I can't log in again" symptom.
+    """
+    if not username:
+        return None
     with get_db_connection() as conn:
-        row = conn.execute("SELECT * FROM users WHERE username = ?;", (username,)).fetchone()
+        row = conn.execute(
+            "SELECT * FROM users WHERE username = ? COLLATE NOCASE;", (username.strip(),)
+        ).fetchone()
         return dict(row) if row else None
+
+
+def get_user_by_email(email: str) -> Optional[Dict[str, Any]]:
+    """Look a user up by email, case-insensitively (emails are case-insensitive)."""
+    if not email:
+        return None
+    with get_db_connection() as conn:
+        row = conn.execute(
+            "SELECT * FROM users WHERE email = ? COLLATE NOCASE;", (email.strip(),)
+        ).fetchone()
+        return dict(row) if row else None
+
+
+def get_user_by_identifier(identifier: str) -> Optional[Dict[str, Any]]:
+    """
+    Resolve a login identifier that may be either a username or an email.
+
+    The sign-in form has one field. Users type whichever they remember, so
+    accepting both removes a whole class of "correct password, wrong field"
+    lockouts without weakening anything: the password check is unchanged.
+    """
+    return get_user_by_username(identifier) or get_user_by_email(identifier)
 
 def get_user_by_id(user_id: str) -> Optional[Dict[str, Any]]:
     with get_db_connection() as conn:
