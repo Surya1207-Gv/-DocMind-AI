@@ -1,42 +1,75 @@
 # DocMind AI — Retrieval-Augmented Document Intelligence
 
-[![Backend Tests](https://github.com/Surya1207-Gv/-DocMind-AI/actions/workflows/tests.yml/badge.svg)](https://github.com/Surya1207-Gv/-DocMind-AI/actions/workflows/tests.yml)
-[![Python 3.12](https://img.shields.io/badge/Python-3.12-blue.svg)](https://www.python.org/)
-[![FastAPI](https://img.shields.io/badge/FastAPI-0.110-009688.svg)](https://fastapi.tiangolo.com/)
-[![React 19](https://img.shields.io/badge/React-19.2-61DAFB.svg)](https://react.dev/)
-[![LangGraph](https://img.shields.io/badge/LangGraph-1.2-orange.svg)](https://langchain-ai.github.io/langgraph/)
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+> Document intelligence platform delivering grounded Q&A with page-level citations, multi-hop reasoning, and evidence gating.
 
-> Ask questions about your own PDFs and get answers that cite the exact page they
-> came from — or an honest "that isn't in the document."
+[![CI](https://github.com/Surya1207-Gv/-DocMind-AI/actions/workflows/tests.yml/badge.svg)](https://github.com/Surya1207-Gv/-DocMind-AI/actions/workflows/tests.yml)
+[![Python 3.12](https://img.shields.io/badge/Python-3.12-blue.svg)](https://www.python.org/)
+[![FastAPI](https://img.shields.io/badge/FastAPI-0.115-009688.svg)](https://fastapi.tiangolo.com/)
+[![React 19](https://img.shields.io/badge/React-19-61DAFB.svg)](https://react.dev/)
+[![LangGraph](https://img.shields.io/badge/LangGraph-1.2-orange.svg)](https://langchain-ai.github.io/langgraph/)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
+
+---
+
+## Demo
+
+* **Live Demo:** `Coming soon`
+* **Workflow:**
+  $$\text{Upload a Document} \longrightarrow \text{Ask a Question} \longrightarrow \text{Retrieve Relevant Passages} \longrightarrow \text{Generate Cited Answer}$$
+
+> **Pre-Seeded Sample:** A bundled handbook (`assets/demo/sample.pdf`) is indexed on boot when `DEMO_SEED=true`, enabling immediate testing without requiring an initial upload.
 
 ---
 
 ## Overview
 
-Large language models are fluent but ungrounded. Ask one about a contract, a
-policy, or a research paper it has never seen and it will usually invent a
-confident, wrong answer. That is unusable for any document you actually care
-about being right.
+Large Language Models (LLMs) are fluent but ungrounded. When asked about domain-specific contracts, compliance policies, or technical papers they were never trained on, they frequently confabulate confident, plausible-sounding falsehoods. This failure mode makes naive LLMs unusable for high-stakes document analysis.
 
-**DocMind AI solves this with retrieval-augmented generation.** Your PDF is
-parsed, chunked, embedded and indexed. When you ask a question, the system
-retrieves the passages that genuinely answer it, hands *only those passages* to
-the model, and shows you which page each claim came from. If nothing relevant is
-found, it says so rather than guessing.
+**DocMind AI solves this using verifiable Retrieval-Augmented Generation (RAG):**
+- **Grounded Answers:** Uploaded documents are parsed, chunked, embedded, and indexed per user. When a query is submitted, only verified relevant passages are injected into the prompt.
+- **Page-Level Provenance:** Every factual statement cites its exact source document and page number, expandable in the UI to inspect the underlying passage.
+- **Honest Refusals:** When a query falls outside the corpus or fails the relevance threshold, the system explicitly refuses to answer rather than guessing.
+- **Hybrid Retrieval:** Dense vector search collapses on rare acronyms and exact codes (`RFC 8446`), while sparse keyword search collapses on conceptual paraphrasing. DocMind runs **both** FAISS vector similarity and Okapi BM25, fusing scores with heuristic boosts to optimize precision and recall.
 
-The interesting engineering is in the retrieval step. Naive vector search misses
-exact identifiers; naive keyword search misses paraphrase. DocMind runs **both**
-and fuses the scores, a design choice validated on a 1,200-chunk benchmark
-(details below).
+---
+
+## Key Features
+
+### Retrieval Quality
+- **Hybrid Search Fusion:** Weighted blending of dense vector similarity (`0.6`) and Okapi BM25 sparse keyword scores (`0.4`).
+- **Custom Okapi BM25 Engine:** In-memory implementation (`k₁=1.5`, `b=0.75`) featuring CamelCase token splitting and multilingual normalization.
+- **Heuristic Ranking Boosts:** Pattern-based boosts for definitional queries (`+0.05`), exact subject-definition proximity (`+0.45`), and section headers (`+0.10`).
+- **Shortlist Reranking:** Deterministic lexical reranker scoring candidates on phrase contiguity and query term coverage.
+- **Lexical Coverage Admission:** Independent threshold route (`LEXICAL_COVERAGE_THRESHOLD=0.50`) preventing pure keyword queries from being penalized by vector distance.
+- **Adjacent-Chunk Expansion:** Automatically stitches the adjacent successor chunk (`chunk_index + 1`) to preserve sentence completion and context cohesion.
+
+### Grounding and Trust
+- **Verifiable Citations:** Exact document name and page number citations attached to every claim.
+- **Confidence Scoring:** Derived from multi-factor retrieval similarity and claim-support verification.
+- **Strict Evidence Gating:** Rejection threshold (`0.50`) that halts generation when candidate evidence is insufficient.
+- **Post-Hoc Citation Pruning:** System inspects model outputs and strips unreferenced sources before returning responses.
+- **Multi-Document Conflict Detection:** Flags contradictory metrics or values across comparative documents.
+
+### Product Experience
+- **Task-Specific Modes:** Four optimized prompt configurations: Q&A (`temp=0.2`), Summary (`temp=0.3`), Deep Analysis (`temp=0.5`), and ELI5 (`temp=0.6`).
+- **Background Document Analytics:** Automated extraction of summaries, key entities, critical alerts, and suggested follow-up questions.
+- **Assessment Generation:** Generates multiple-choice quizzes with page references for review and compliance verification.
+- **Cross-Document Comparison:** Side-by-side comparative analysis across multiple uploaded documents.
+- **Multi-Format Ingestion:** Native extraction for PDF, Markdown, Plain Text, HTML, DOCX, and web URLs.
+- **Session Continuity:** Persistent chat history stored in SQLite with PDF export capabilities.
+
+### Engineering
+- **Multi-Tenant Isolation:** Per-user document ownership, isolated SQLite records, and independent FAISS directory indices.
+- **Production-Grade Testing:** 317 backend tests (unit, API integration, and regression suites) and 46 frontend tests executed in CI.
+- **Real-Time Streaming:** Chunked responses delivered via Server-Sent Events (SSE).
+- **Observability & Telemetry:** Per-request retrieval telemetry and aggregated performance counters (`GET /api/metrics`).
+- **Zero-Secret Codebase:** 100% environment-driven configuration with strict startup validation.
 
 ---
 
 ## Architecture
 
-The entire product ships as **one service on one origin** — FastAPI serves both
-the JSON API and the compiled React SPA. There is no separate frontend
-deployment, no CORS negotiation, and one URL to share.
+DocMind AI is engineered as **a single-origin service**: FastAPI serves both the JSON/SSE API endpoints and the compiled React SPA. This eliminates cross-origin configuration, simplifies network routing, and enables single-container deployments.
 
 ```
                               ┌──────────────────────────────┐
@@ -82,410 +115,18 @@ deployment, no CORS negotiation, and one URL to share.
           └───────────────────────────────────────────┘
 ```
 
-For multi-hop and comparative questions, the request is routed through a
-**LangGraph `StateGraph`** instead:
+For comparative and multi-step reasoning, execution transitions through a **LangGraph `StateGraph`**:
 
 ```
-Query ─► Planner ─► Retriever ─► Synthesizer ─► Verifier ─► Verified answer
-         (split     (hybrid      (cross-source   (checks claims
-          into 2-3   search per   synthesis      back against
-          sub-Qs)    sub-query)   + citations)   the context)
+Query ──► Planner ──► Retriever ──► Synthesizer ──► Verifier ──► Verified Answer
+         (split into   (hybrid      (cross-source    (verifies claims
+          2-3 sub-Qs)   search per   synthesis +      against context &
+                        sub-query)   citations)       prunes citations)
 ```
 
----
+### Observability & Telemetry
 
-## Features
-
-**Retrieval quality**
-- Hybrid dense + sparse retrieval with weighted score fusion
-- Custom Okapi BM25 implementation (`k₁=1.5`, `b=0.75`) with CamelCase splitting
-- Heuristic boosts for definition-style questions and section headers
-- Relevance gating — low-scoring chunks are dropped, not passed to the model
-- Adjacent-chunk expansion so retrieved passages do not end mid-sentence
-
-**Grounding and trust**
-- Page-level citations on every answer, expandable to the exact source text
-- Confidence score derived from the fused retrieval score
-- Explicit refusal when nothing passes the relevance threshold
-- Post-hoc citation pruning: sources the model did not use are removed
-
-**Product**
-- Four answer modes: Q&A, Summary, Deep Analysis, ELI5
-- Background document analysis: summary, entities, alerts, suggested questions
-- Auto-generated multiple-choice quizzes with page references
-- Multi-document comparison
-- Conversation history and PDF export
-- One-click demo login with a sample document pre-indexed
-
-**Engineering**
-- JWT auth with bcrypt hashing; per-user isolation of documents and indices
-- 71 automated tests (62 backend, 9 frontend) running in CI
-- Structured RAG telemetry (`/api/metrics`) — latency, zero-hit rate, boost rate
-- Health endpoint probing database, index writability and LLM configuration
-- Fully environment-driven configuration; no secrets in code
-
----
-
-## Tech Stack
-
-| Layer | Choice |
-|---|---|
-| Language | Python 3.12 · JavaScript (ES2022) |
-| Backend | FastAPI 0.110, Uvicorn, Pydantic v2 |
-| Frontend | React 19, Vite 8, Axios |
-| LLM | `nvidia/nemotron-3-nano-30b-a3b:free` via OpenRouter (Gemini 2.5 Flash fallback) |
-| Embeddings | `openai/text-embedding-3-small` via OpenRouter |
-| Vector store | FAISS (`faiss-cpu`), one index per document, persisted to disk |
-| Keyword search | Custom Okapi BM25 (no external dependency) |
-| Agent | LangGraph `StateGraph` |
-| Database | SQLite in WAL mode |
-| Auth | PyJWT + bcrypt |
-| Tests | pytest, Vitest, GitHub Actions |
-| Deployment | Docker (multi-stage) → Render free tier |
-
----
-
-## How RAG Works Here
-
-**1 · Ingest.** `pypdf` extracts text page by page. Page numbers are captured at
-extraction time, because a citation that cannot name a page is not verifiable. A
-PDF that yields no text is rejected as scanned rather than indexed as an empty
-document.
-
-**2 · Chunk.** `RecursiveCharacterTextSplitter` splits on paragraph → sentence →
-word boundaries at **1000 characters with 150 characters of overlap**. Each chunk
-carries `doc_id`, `doc_name`, `page` and `chunk_index` as metadata.
-
-**3 · Embed.** Chunks are embedded in batches of up to 500 per API call and
-written to a FAISS index named after the document, so deleting a document is a
-directory removal with no global rebuild.
-
-**4 · Retrieve.** The query is embedded, then FAISS returns `max(3·k, 15)`
-candidates. Each candidate is scored by both methods and fused:
-
-```
-hybrid = 0.6 · vector_similarity + 0.4 · normalised_BM25   (+ heuristic boosts)
-```
-
-**5 · Gate.** Candidates below `0.50` are discarded. This is the step that
-prevents hallucination: returning the least-bad chunk when nothing relevant
-exists is exactly how a "grounded" system ends up making things up anyway.
-
-**6 · Generate.** Surviving chunks become a numbered context block. The system
-prompt instructs the model to answer only from that block and to list the source
-indices it used. Unused sources are pruned before the final SSE event.
-
----
-
-## Local Setup
-
-**Prerequisites:** Python 3.12, Node.js 20, and an
-[OpenRouter API key](https://openrouter.ai/keys) (the free tier is sufficient).
-
-```bash
-git clone https://github.com/Surya1207-Gv/-DocMind-AI.git
-cd -DocMind-AI
-
-# 1. Configure secrets
-cp .env.example backend/.env          # Windows: copy .env.example backend\.env
-#    then set OPENROUTER_API_KEY and JWT_SECRET_KEY
-python -c "import secrets; print(secrets.token_hex(32))"   # value for JWT_SECRET_KEY
-
-# 2. Backend
-python -m venv backend/venv
-source backend/venv/Scripts/activate  # Linux/macOS: source backend/venv/bin/activate
-pip install -r backend/requirements-dev.txt
-uvicorn backend.main:app --reload --port 8000
-
-# 3. Frontend (second terminal)
-cd frontend
-npm install
-npm run dev
-```
-
-Open <http://localhost:5173>. Vite proxies `/api` to port 8000, so the frontend
-uses the same same-origin paths it will use in production.
-
-**To run exactly what gets deployed** (SPA compiled and served by FastAPI):
-
-```bash
-cd frontend && npm run build && cd ..
-uvicorn backend.main:app --port 8000
-# open http://localhost:8000
-```
-
-**Or with Docker:**
-
-```bash
-cp .env.example .env      # fill in OPENROUTER_API_KEY and JWT_SECRET_KEY
-docker compose up --build
-# open http://localhost:8000
-```
-
-### Tests
-
-```bash
-python -m pytest backend/tests/ -v --cov=backend    # 62 backend tests
-cd frontend && npm run test                          # 9 frontend tests
-python eval/run_eval.py                              # retrieval benchmark
-```
-
----
-
-## Environment Variables
-
-Copy `.env.example` and fill it in. **Never commit `.env`** — it is gitignored.
-
-### Required
-
-| Variable | Purpose |
-|---|---|
-| `OPENROUTER_API_KEY` | Serves both the chat model and the embedding model. Get one at [openrouter.ai/keys](https://openrouter.ai/keys). |
-| `JWT_SECRET_KEY` | Signs session tokens. Generate with `python -c "import secrets; print(secrets.token_hex(32))"`. The app refuses to start without it. |
-
-### Optional
-
-| Variable | Default | Purpose |
-|---|---|---|
-| `GEMINI_API_KEY` | — | Gemini 2.5 Flash fallback LLM. Preferred over OpenRouter when set. |
-| `DATA_DIR` | `backend/` | Single writable root for uploads, indices, database and logs. Point at a mounted volume to persist state. |
-| `ALLOWED_ORIGINS` | localhost dev origins | CORS allowlist. Leave empty in production — the SPA is same-origin. |
-| `DEMO_SEED` | `false` | Index the bundled sample PDF at startup so a fresh instance is never empty. |
-| `DEMO_USERNAME` / `DEMO_PASSWORD` | `demo` / `demo1234` | Credentials for the one-click demo account. |
-| `TOP_K` | `8` | Chunks passed to the LLM as context. |
-| `CHUNK_SIZE` / `CHUNK_OVERLAP` | `1000` / `150` | Chunking parameters. |
-| `RELEVANCE_THRESHOLD` | `0.5` | Below this fused score a chunk is discarded. |
-| `VECTOR_WEIGHT` | `0.6` | Vector share of the hybrid score; BM25 gets the remainder. |
-| `MAX_UPLOAD_MB` | `25` | Upload size limit. |
-| `LLM_MODEL` / `EMBEDDING_MODEL` | see table above | Swap models without touching code. |
-| `ADMIN_PASSWORD` | random | Only needed to log in as the legacy `admin` account. |
-| `LOG_LEVEL` | `INFO` | Logging verbosity. |
-
----
-
-## Deployment
-
-Deployed as **a single Docker web service on Render's free tier**. The image
-compiles the React SPA in one stage and serves it from FastAPI in the next, so
-there is one service, one URL and no CORS configuration.
-
-### Steps
-
-1. **Push to GitHub.**
-
-2. **Create the service.** In the [Render dashboard](https://dashboard.render.com):
-   *New → Blueprint* → select this repository. Render reads `render.yaml` and
-   configures the Docker service automatically.
-   (Or *New → Web Service* → Runtime **Docker**, Dockerfile path `./Dockerfile`,
-   health check path `/api/health`.)
-
-3. **Set the secrets** when prompted:
-   - `OPENROUTER_API_KEY` — your key
-   - `DEMO_PASSWORD` — any password for the demo account
-   - `JWT_SECRET_KEY` — Render generates this automatically
-   - `GEMINI_API_KEY` — optional, may be left blank
-
-4. **Deploy.** The first build takes roughly 5–10 minutes. Your app is then live at
-   `https://<service-name>.onrender.com`.
-
-### Free-tier behaviour worth knowing
-
-- **Cold starts.** The instance sleeps after ~15 minutes idle; the next request
-  takes 30–60 seconds to wake it. Load the URL a minute before a demo.
-- **Ephemeral disk.** Free instances have no persistent volume, so uploads and
-  chat history reset when the instance restarts. `DEMO_SEED=true` re-indexes the
-  bundled sample PDF on every boot, so the app is never empty. To persist state,
-  move to a paid instance and uncomment the `disk:` block in `render.yaml`.
-
----
-
-## Example Questions
-
-The demo account has a sample handbook pre-indexed. Try:
-
-- *What is Retrieval-Augmented Generation?* — definition-style retrieval
-- *What is the default chunk size and overlap, and why?* — exact numeric facts
-- *Why does the system use hybrid retrieval instead of vector search alone?* — reasoning across a full section
-- *What happens when no chunk passes the relevance threshold?* — tests the grounding behaviour
-- *How does chunking differ from indexing?* — comparative, routes through the agent
-- *What was Tesla's 2019 revenue in Norway?* — **should be refused**; nothing in the corpus answers it
-
-That last one is the important demo. A system that answers it is broken.
-
----
-
-## Limitations
-
-Stated honestly, because these are the questions an interviewer will ask:
-
-- **No OCR.** Scanned PDFs without a text layer cannot be read. The upload is
-  rejected with a clear message rather than silently indexed as empty.
-- **Tables lose structure.** Text extraction flattens columns, so tabular data
-  retrieves poorly.
-- **Free-tier LLM.** The default model is a small free model; answer quality is
-  below GPT-4-class models. Swapping `LLM_MODEL` is a one-variable change.
-- **In-process FAISS.** Indices are loaded and merged per query. This is fast and
-  free for demo-scale corpora but will not scale to millions of chunks or
-  horizontal replicas — that needs a managed vector database.
-- **No persistence on the free tier.** See the deployment note above.
-- **Heuristic boosts are English-specific.** The definition and header boosts use
-  English regex patterns and would need rework for other languages.
-- **Retrieval latency is dominated by the embedding API call** (~1–1.5 s), not by
-  FAISS (~30 ms).
-
----
-
-## Future Improvements
-
-- Cross-encoder re-ranking on the top ~20 candidates for better precision
-- OCR fallback (Tesseract) for scanned documents
-- Swap FAISS for Qdrant or pgvector to support replicas and metadata filtering
-- Query rewriting from conversation history for better follow-up handling
-- Streaming ingestion with progress feedback for large uploads
-- Automated regression gate: fail CI if benchmark recall drops
-
----
-
-## How I Would Explain This Project in an Interview
-
-**The problem.** LLMs hallucinate on documents they were never trained on. If you
-ask one about your own contract or policy, you get a fluent answer with no way to
-tell whether it is true. I wanted a system where every claim is traceable to a
-page, and where "I don't know" is a valid, reachable answer.
-
-**The architecture.** A FastAPI backend and a React SPA, shipped as a single
-Docker image where FastAPI serves the compiled frontend. One service, one origin,
-no CORS. Ingestion extracts text per page, chunks it, embeds it, and writes a
-FAISS index per document. Queries embed, retrieve, gate, and prompt.
-
-**Why RAG rather than fine-tuning.** Fine-tuning bakes knowledge into weights: it
-is expensive, must be redone whenever a document changes, and still cannot cite a
-source. RAG keeps knowledge in an index — updating means re-indexing one file —
-and because the evidence is in the prompt, every answer is auditable. For a
-document-QA product, auditability is the whole requirement.
-
-**Why FAISS.** The corpus is per-user and demo-scale. FAISS is a library, not a
-service: no extra container, no network hop, no monthly bill, and it persists to
-disk as two files I can delete per document. A managed vector DB like Pinecone
-would add cost and an availability dependency for capabilities — replication,
-metadata filtering at scale — that this workload does not need. I know where the
-ceiling is: once indices exceed memory or I need multiple replicas, FAISS-in-
-process stops being the right answer and I would move to Qdrant or pgvector.
-
-**Chunking strategy.** 1000 characters with 150 characters (15%) of overlap,
-split recursively on paragraph then sentence boundaries. The trade-off is
-concrete: chunks that are too small retrieve confidently but answer
-incompletely, because the surrounding argument is gone; chunks that are too large
-dilute the embedding, because one vector has to represent several ideas. The
-overlap exists so a sentence straddling a boundary still appears whole in one
-neighbour. I also attach the *next* chunk to every retrieved chunk, because a
-retrieved passage often ends mid-argument.
-
-**Embedding strategy.** `text-embedding-3-small` — 1536 dimensions, strong
-quality per dollar, and reached through OpenRouter so the same key serves both
-embeddings and generation. Chunks are batched 500 per request, which turned
-ingestion from many round trips into a handful.
-
-**Retrieval strategy — the part I'd want to be asked about.** I use hybrid
-retrieval because the two methods fail in complementary ways, and I measured it
-rather than assumed it. On a 1,200-chunk benchmark with 60 labelled queries,
-pure BM25 collapsed to 25% Recall@4 on paraphrase queries with no vocabulary
-overlap, while pure vector search dropped to 66.7% on rare identifiers like
-`RFC 8446` — embeddings blur precise tokens. Fusing them at 0.6/0.4 lifted
-Recall@4 from 75.0% (vector) and 73.3% (BM25) to 86.7%, and adding the
-definition-proximity boost took it to 95.0% with nDCG@4 of 0.90 and mean rank
-1.52. The cost is latency: 27 ms → 53 ms for retrieval, which is negligible
-next to the ~1.4 s embedding call and multi-second generation.
-
-**Prompt strategy.** Retrieved chunks are injected as a numbered context block
-with document name and page. The system prompt constrains the model to that
-context and requires it to emit the source indices it actually used, which I then
-use to prune unused citations — so the UI never shows a source the answer did not
-rely on. There are four prompt variants (Q&A, summary, deep, ELI5) with different
-temperatures.
-
-**Evaluation and limitations.** I measure Recall@k and MRR, not vibes: recall
-asks whether the right passage was retrieved at all, MRR asks how near the top it
-was, and they can move in opposite directions — widening the candidate set raises
-recall while hurting precision. The relevance threshold is the honesty mechanism:
-if nothing scores above 0.50, the system refuses instead of answering from the
-least-bad chunk. Known weaknesses: no OCR, tables lose structure, a small free
-LLM, and FAISS-in-process won't scale horizontally.
-
-**Deployment.** One Docker image on Render's free tier. The multi-stage build
-compiles the SPA with Node then copies the static build into the Python runtime,
-so the deployed artifact is byte-identical to what I test locally. Configuration
-is entirely environment-driven — chunk size, top-k, threshold, and model names
-are all env vars, so tuning retrieval does not require a code change. All runtime
-state lives under a single `DATA_DIR` so attaching a persistent volume is a
-one-variable change. I know the free tier's constraints — cold starts and an
-ephemeral disk — so the app re-seeds a bundled sample document on boot and is
-never empty when someone opens the link.
-
----
-
-## API Surface
-
-18 endpoints. Interactive docs at `/docs` when running.
-
-| Method | Endpoint | Auth | Purpose |
-|---|---|---|---|
-| `GET` | `/api/health` | No | DB, index-writability and LLM configuration probe |
-| `GET` | `/api/info` | No | Service descriptor: active model names and top-k |
-| `POST` | `/api/auth/register` | No | Register a user |
-| `POST` | `/api/auth/login` | No | Obtain a JWT |
-| `PUT` | `/api/users/me` | Yes | Update profile |
-| `GET` | `/api/chats/active` | Yes | List active conversations |
-| `POST` | `/api/upload` | Yes | Upload a PDF (magic-byte + size validated) |
-| `GET` | `/api/documents` | Yes | List the caller's documents |
-| `DELETE` | `/api/documents/{doc_id}` | Yes | Delete a document and its index |
-| `POST` | `/api/chat` | Yes | Single-shot RAG chat, streamed over SSE |
-| `POST` | `/api/chat/agent` | Yes | Multi-hop LangGraph agent, streamed over SSE |
-| `GET` | `/api/chat/history/{doc_id}` | Yes | Conversation history |
-| `DELETE` | `/api/chat/history/{doc_id}` | Yes | Clear conversation history |
-| `GET` | `/api/analytics/{doc_id}` | Yes | Background document analytics |
-| `POST` | `/api/quiz/{doc_id}` | Yes | Generate a multiple-choice quiz |
-| `POST` | `/api/compare` | Yes | Cross-document comparison |
-| `POST` | `/api/agent/query` | Yes | Multi-hop agent, JSON response |
-| `GET` | `/api/telemetry` · `/api/metrics` | Yes | Aggregate RAG operational metrics |
-
----
-
-## Empirical Retrieval Benchmark
-
-> **Corpus note.** To measure retrieval under repeatable, un-confounded
-> conditions, performance is evaluated on a controlled 1,200-chunk corpus across
-> four document archetypes (dense RFC specifications, deep-learning papers,
-> banking/compliance regulations, cloud infrastructure guides) with 60
-> ground-truth labelled queries. Top-4 retrieval inspects 0.33% of the corpus.
-
-| Retrieval configuration | nDCG@4 | Mean rank | Recall@1 | Recall@4 | Recall@10 | Precision@4 | MRR | Score separation | Latency |
-|---|---|---|---|---|---|---|---|---|---|
-| 1 · Pure vector (FAISS only) | 0.6974 | 9.23 | 58.3% | 75.0% | 85.0% | 18.8% | 0.6854 | −0.0821 | 27.67 ms |
-| 2 · Pure BM25 (keyword only) | 0.7121 | 24.87 | 66.7% | 73.3% | 75.0% | 18.3% | 0.7093 | −0.1245 | 26.54 ms |
-| 3 · Naive hybrid (60/40) | 0.8149 | 3.45 | 73.3% | 86.7% | 96.7% | 21.7% | 0.8032 | +0.0412 | 47.92 ms |
-| **4 · DocMind boosted hybrid (prod)** | **0.9023** | **1.52** | **86.7%** | **95.0%** | **100.0%** | **23.8%** | **0.8942** | **+0.2315** | **52.88 ms** |
-
-**Findings**
-
-- **BM25's blind spot.** On paraphrase queries with zero vocabulary overlap,
-  pure BM25 falls to 25.0% Recall@4 while vector search holds 83.3%.
-- **Vector's blind spot.** On rare identifiers (`RFC 8446`, `PCI-DSS 4.0 Req 3.4`),
-  pure vector search drops to 66.7% Recall@4 while BM25 scores 100%.
-- **Definition-proximity boost (+0.45).** Lifts definitional queries from 80.0%
-  to 100.0% Recall@4 and improves nDCG@4 from 0.8149 to 0.8917.
-- **Score separation (+0.2315).** In production configuration the relevant chunk
-  scores 0.23 above the best distractor, which is what makes a fixed 0.50
-  threshold dependable.
-
-Reproduce with `python eval/run_eval.py`. Full method in
-[`docs/retrieval_benchmark.md`](docs/retrieval_benchmark.md).
-
----
-
-## Observability
-
-Every retrieval emits a structured event:
+Every retrieval cycle logs a structured telemetry event tracking query hash, candidate volumes, component latencies, and applied boosts:
 
 ```json
 {
@@ -500,39 +141,339 @@ Every retrieval emits a structured event:
 }
 ```
 
-Aggregates — query count, mean latency, zero-hit rate, boost rate — are exposed
-at `GET /api/metrics`. The UI additionally shows, under each answer, how many
-chunks were retrieved, how long retrieval took, and which model responded.
+Aggregated metrics—including total queries, average latency, zero-hit frequency, and boost application rates—are exposed via `GET /api/metrics`. In the UI, every response includes metadata showing retrieval duration, chunk count, and the active LLM.
 
-A rising **zero-hit rate** is the leading indicator that retrieval has degraded.
+---
+
+## Tech Stack
+
+| Layer | Technology |
+|---|---|
+| Language | Python 3.12 · JavaScript (ES2022) |
+| Backend | FastAPI, Uvicorn, Pydantic v2 |
+| Frontend | React 19, Vite, Axios |
+| LLM | `nvidia/nemotron-3-nano-30b-a3b:free` via OpenRouter (fallback: `gemini-3.6-flash`) |
+| Embeddings | `openai/text-embedding-3-small` (1536 dim) via OpenRouter |
+| Vector Store | FAISS (`faiss-cpu`), local per-document index files |
+| Keyword Search | Custom Okapi BM25 (`k₁=1.5`, `b=0.75`) with CamelCase splitting |
+| Agent Framework | LangGraph (`StateGraph` planner, retriever, synthesizer, verifier) |
+| Database | SQLite in WAL mode (`docmind.db`) |
+| Auth | PyJWT + bcrypt with user-scoped isolation |
+| Tests | pytest, pytest-cov, Vitest, GitHub Actions CI |
+| Deployment | Multi-stage Docker container → Render free tier (single web service) |
+
+---
+
+## How RAG Works
+
+The ingestion and retrieval lifecycle is divided into six deterministic phases:
+
+1. **Ingest:** Documents are extracted page-by-page via `pypdf` (or specialized parsers for Markdown, TXT, HTML, and DOCX). Original page numbers and section headers are preserved as immutable chunk metadata. Scanned documents devoid of text layers are rejected immediately.
+2. **Chunk:** `RecursiveCharacterTextSplitter` segments text on paragraph, sentence, and word boundaries at **1,000 characters with 150 characters of overlap (15%)**. Each chunk retains `doc_id`, `doc_name`, `page`, and `chunk_index`.
+3. **Embed:** Chunks are vectorized using `text-embedding-3-small` in batches of 700 chunks per request and written to a dedicated per-document FAISS index on disk.
+4. **Retrieve:** The user query is vectorized, and FAISS fetches an expanded candidate shortlist:
+   $$\text{candidate\_count} = \max(\text{TOP\_K} \times 3, 15)$$
+   Each candidate is scored across dense and sparse channels, normalized, boosted, and reranked:
+   $$\text{Hybrid Score} = 0.6 \cdot \text{Vector Similarity} + 0.4 \cdot \text{Normalized BM25} + \text{Heuristic Boosts}$$
+5. **Gate:** Chunks falling below `RELEVANCE_THRESHOLD=0.50` are dropped unless they satisfy the independent lexical coverage route (`LEXICAL_COVERAGE_THRESHOLD=0.50`). If no candidates survive, the request terminates early with an honest refusal.
+6. **Generate:** Qualifying passages are expanded with their adjacent chunk and injected into a numbered context block. The LLM synthesizes the response, explicitly citing used sources. Unreferenced sources are pruned prior to streaming.
+
+---
+
+## Local Setup
+
+### Prerequisites
+- Python 3.12+
+- Node.js 20+
+- An [OpenRouter API key](https://openrouter.ai/keys) (free tier supported)
+
+### 1. Clone & Configure Secrets
+
+```bash
+git clone https://github.com/Surya1207-Gv/-DocMind-AI.git
+# Note: The './' prefix prevents shells from interpreting the leading dash as a command flag
+cd ./-DocMind-AI
+
+# Windows
+copy .env.example backend\.env
+
+# Linux/macOS
+cp .env.example backend/.env
+```
+
+Generate a secure secret key for JWT token signing:
+```bash
+python -c "import secrets; print(secrets.token_hex(32))"
+```
+Open `backend/.env` and assign the generated string to `JWT_SECRET_KEY`, and add your `OPENROUTER_API_KEY`.
+
+### 2. Backend Setup
+
+```bash
+# Create virtual environment
+python -m venv backend/venv
+
+# Activate virtual environment
+# Windows (Command Prompt):
+backend\venv\Scripts\activate
+# Windows (PowerShell):
+.\backend\venv\Scripts\Activate.ps1
+# Linux/macOS:
+source backend/venv/bin/activate
+
+# Install dependencies
+pip install -r backend/requirements-dev.txt
+
+# Start backend dev server
+uvicorn backend.main:app --reload --port 8000
+```
+
+### 3. Frontend Setup (Second Terminal)
+
+```bash
+cd frontend
+npm install
+npm run dev
+```
+
+Navigate to `http://localhost:5173`. Vite proxies `/api` requests directly to `http://127.0.0.1:8000`.
+
+### 4. Running Production Build Locally (Single Origin)
+
+To test the exact single-origin deployment served entirely by FastAPI:
+
+```bash
+# Build frontend
+cd frontend
+npm run build
+cd ..
+
+# Serve via FastAPI
+uvicorn backend.main:app --port 8000
+# Open http://localhost:8000
+```
+
+### 5. Running with Docker Compose
+
+```bash
+# Windows
+copy .env.example .env
+
+# Linux/macOS
+cp .env.example .env
+
+# Start container
+docker compose up --build
+# Open http://localhost:8000
+```
+
+---
+
+## Environment Variables
+
+> **Security Note:** Never commit `.env` or credential files to version control. The repository `.gitignore` explicitly excludes `.env`, `backend/.env`, and local SQLite/FAISS state.
+
+### Required Variables
+
+| Variable | Default | Purpose |
+|---|---|---|
+| `OPENROUTER_API_KEY` | — | API key for LLM generation and embedding inference via [OpenRouter](https://openrouter.ai/keys). |
+| `JWT_SECRET_KEY` | — | Cryptographic secret used to sign and verify JWT session tokens. |
+
+### Optional Variables
+
+| Variable | Default | Purpose |
+|---|---|---|
+| `GEMINI_API_KEY` | — | Google Gemini fallback key (`gemini-3.6-flash`). Preferred over OpenRouter when set. |
+| `DATA_DIR` | `backend/` | Single writable directory for uploads, FAISS indices, SQLite DB, and log files. |
+| `ALLOWED_ORIGINS` | localhost dev origins | Comma-separated CORS origins. Leave empty in production (same-origin). |
+| `FRONTEND_DIST_DIR` | `frontend/dist` | Path to compiled React production assets served by FastAPI. |
+| `LLM_MODEL` | `nvidia/nemotron-3-nano-30b-a3b:free` | Default model identifier for generation. |
+| `EMBEDDING_MODEL` | `openai/text-embedding-3-small` | Default embedding model identifier (1536 dimensions). |
+| `CHUNK_SIZE` | `1000` | Target character size per document chunk. |
+| `CHUNK_OVERLAP` | `150` | Character overlap shared between adjacent chunks. |
+| `TOP_K` | `8` | Maximum number of context chunks delivered to the LLM. |
+| `RELEVANCE_THRESHOLD` | `0.5` | Minimum hybrid similarity score required for candidate inclusion. |
+| `VECTOR_WEIGHT` | `0.6` | Dense vector weight in hybrid scoring (BM25 weight is `1.0 - VECTOR_WEIGHT`). |
+| `LEXICAL_COVERAGE_THRESHOLD` | `0.5` | Threshold for independent lexical coverage admission route. |
+| `MAX_UPLOAD_MB` | `25` | Maximum allowed file upload size in megabytes. |
+| `DEMO_SEED` | `false` | Automatically indexes bundled sample PDF on startup when set to `true`. |
+| `DEMO_USERNAME` | `demo` | Username for the pre-seeded public demo account. |
+| `DEMO_PASSWORD` | `demo1234` | Default password for local development and public demo instances (do not use in production). |
+| `RERANKER` | `lexical` | Second-stage reranker algorithm (`lexical`, `llm`, or `none`). |
+| `RERANK_WEIGHT` | `0.4` | Displacement weight applied by the reranker on fused scores. |
+| `RERANK_CANDIDATES` | `15` | Shortlist candidate count evaluated by the reranker. |
+| `VERIFICATION_ENABLED` | `true` | Enables lexical claim support and hallucination verification. |
+| `EVIDENCE_GATE_ENABLED` | `true` | Gates answers below confidence thresholds with explicit warnings or refusals. |
+| `LOG_LEVEL` | `INFO` | Application log verbosity (`DEBUG`, `INFO`, `WARNING`, `ERROR`). |
+
+---
+
+## Running Tests
+
+### Backend Test Suite
+The backend test suite contains **317 tests** across unit, API integration, and regression suites:
+
+```bash
+# Windows (PowerShell)
+$env:PYTHONPATH="."
+python -m pytest backend/tests/ -v --cov=backend
+
+# Linux/macOS
+PYTHONPATH=. python -m pytest backend/tests/ -v --cov=backend
+```
+
+### Frontend Test Suite
+The React application contains **46 tests** covering UI components, confidence meters, and document management:
+
+```bash
+cd frontend
+npm run test
+```
+
+### Retrieval Benchmark Suite
+To execute the empirical retrieval benchmark across the 1,200-chunk corpus:
+
+```bash
+python eval/run_eval.py
+```
+
+---
+
+## API Endpoints
+
+Interactive Swagger UI documentation is available at `/docs` (and ReDoc at `/redoc`) when the backend is running.
+
+| Method | Endpoint | Auth | Purpose |
+|---|---|---|---|
+| `GET` | `/api/health` | No | System health probe checking database connectivity, storage writability, and LLM configuration. |
+| `GET` | `/api/info` | No | Service descriptor returning active model names, upload limits, and default retrieval parameters. |
+| `POST` | `/api/auth/register` | No | Register a new user account with email and username validation. |
+| `POST` | `/api/auth/login` | No | Authenticate credentials and issue a signed JWT access token. |
+| `PUT` | `/api/users/me` | Yes | Update current user profile attributes. |
+| `GET` | `/api/chats/active` | Yes | List active conversation sessions belonging to the caller. |
+| `POST` | `/api/upload` | Yes | Upload and index a document (magic-byte validation and size enforcement). |
+| `POST` | `/api/documents/from-url` | Yes | Ingest and index a document from a public URL (with SSRF protection). |
+| `GET` | `/api/documents` | Yes | List all indexed documents owned by the caller. |
+| `DELETE` | `/api/documents/{doc_id}` | Yes | Delete a document, its database records, and its on-disk FAISS index. |
+| `GET` | `/api/documents/relationships` | Yes | Detect duplicate, version, and topical relationships across documents. |
+| `POST` | `/api/chat` | Yes | Single-shot RAG conversation streamed via Server-Sent Events (SSE). |
+| `POST` | `/api/chat/agent` | Yes | Multi-hop LangGraph agent Q&A streamed via SSE. |
+| `GET` | `/api/chat/history/{doc_id}` | Yes | Retrieve persistent conversation history for a document. |
+| `DELETE` | `/api/chat/history/{doc_id}` | Yes | Clear conversation history associated with a document. |
+| `GET` | `/api/analytics/{doc_id}` | Yes | Fetch background document analytics (summary, entities, alerts, suggested questions). |
+| `POST` | `/api/quiz/{doc_id}` | Yes | Generate a multiple-choice assessment with page citations. |
+| `POST` | `/api/compare` | Yes | Perform multi-document comparison and synthesis. |
+| `POST` | `/api/agent/query` | Yes | Execute synchronous multi-hop query decomposition (JSON response). |
+| `POST` | `/api/rag/trace` | Yes | Retrieve step-by-step scoring, candidate rankings, and gating decisions for a query. |
+| `GET` | `/api/telemetry` | Yes | Fetch aggregate RAG operational telemetry. |
+| `GET` | `/api/metrics` | Yes | Fetch operational metrics (latencies, zero-hit rate, boost counts). |
+
+---
+
+## Evaluation
+
+The retrieval pipeline was evaluated on the project's controlled 1,200-chunk benchmark across four document archetypes (technical RFCs, AI research papers, regulatory compliance guidelines, and cloud infrastructure architecture) using 60 discriminating labeled queries.
+
+**Key Metrics:**
+- **Recall@4:** 98.3% (95.0% at operating threshold 0.50)
+- **nDCG@4:** 0.9095 (0.8885 at operating threshold 0.50)
+- **MRR (Mean Reciprocal Rank):** 0.8839
+- **Zero-Hit Rate:** 0.0%
+- **LangGraph Multi-Hop Agent Recall@4:** 100.0% (+9.1% improvement over single-shot 90.9%)
+
+See [Retrieval Benchmark](docs/retrieval_benchmark.md) for full methodology, ablation sweeps, and failure analysis.  
+For technical interview deep dives and architectural rationale, see [Interview Notes](docs/interview-notes.md).
+
+---
+
+## Deployment
+
+DocMind AI is deployed as **a single Docker web service on Render's free tier**. A multi-stage Docker build compiles the Vite React SPA in a Node environment, then copies static assets into the Python runtime where FastAPI serves them from a single origin.
+
+### Render Blueprint Deploy
+
+1. Push the repository to GitHub.
+2. In the [Render Dashboard](https://dashboard.render.com): click **New → Blueprint** and select the repository. Render reads [`render.yaml`](render.yaml) automatically.
+3. Configure prompted secrets:
+   - `OPENROUTER_API_KEY`: Your OpenRouter API key.
+   - `DEMO_PASSWORD`: Desired password for the public demo account.
+   - `GEMINI_API_KEY`: (Optional) Google Gemini API key.
+   - *Note:* `JWT_SECRET_KEY` is automatically generated by Render (`generateValue: true`).
+4. Click **Deploy**. The app will be live at `https://<service-name>.onrender.com`.
+
+### Operational Notes (Free Tier)
+- **Cold Starts:** Free instances spin down after ~15 minutes of inactivity. Initial wake-up requests take 30–60 seconds.
+- **Ephemeral Storage:** Free instances do not include persistent disks; local SQLite state and FAISS indices reset upon restarts. Setting `DEMO_SEED=true` re-indexes `assets/demo/sample.pdf` on boot so the platform is always demo-ready.
+- **Production Persistence:** For production use, uncomment the `disk:` configuration in `render.yaml` and switch the plan to `starter` to mount persistent storage under `/data`.
+
+---
+
+## Limitations
+
+- **No OCR Support:** Scanned PDFs without an embedded text layer cannot be parsed. The upload is rejected with a clear error rather than creating an empty index.
+- **Table Structure Flattening:** Standard PDF text extraction flattens tabular structures, reducing retrieval precision on matrix data.
+- **Free-Tier LLM Constraints:** The default free model (`nemotron-3-nano-30b`) has limited contextual capacity compared to frontier models; switching to frontier models (e.g., GPT-4) is configurable via `LLM_MODEL`, or by enabling Google Gemini via `GEMINI_API_KEY`.
+- **In-Process Vector Store:** FAISS indices run in-process on the local host. While fast for demo and per-user collections, horizontal multi-replica scaling requires transitioning to a distributed vector database (e.g., Qdrant or pgvector).
+- **Ephemeral Free-Tier Storage:** State resets upon instance reboot unless attached to a persistent volume.
+- **English-Centric Regex Heuristics:** Definition and header boosts utilize English linguistic markers and require tuning for other languages.
+- **External Embedding Latency:** Overall retrieval latency is dominated by the external embedding API round-trip (~1.0–1.5s), while local FAISS similarity search executes in ~30ms.
+
+---
+
+## Future Improvements
+
+- **Cross-Encoder Reranker:** Integrate a lightweight cross-encoder model to rescore the top candidate pool for higher precision.
+- **OCR Pipeline Integration:** Implement Tesseract or PyMuPDF OCR fallback for scanned and image-heavy documents.
+- **Managed Vector Store Adapter:** Add pluggable support for Qdrant or pgvector to enable horizontal scaling and distributed persistence.
+- **Multi-Turn Query Rewriting:** Integrate historical conversation context into query reformulation for complex multi-turn follow-ups.
+- **Streaming Document Ingestion:** Provide real-time chunking and vectorization progress indicators over WebSockets or SSE.
+- **Automated CI Regression Gating:** Add automated gates in GitHub Actions to block pull requests that cause retrieval recall degradation on benchmark datasets.
 
 ---
 
 ## Project Structure
 
-```
-├── Dockerfile              # multi-stage: build SPA → serve from FastAPI
-├── render.yaml             # Render blueprint (one web service)
-├── docker-compose.yml      # local container run
-├── .env.example            # every configurable variable, documented
-├── assets/demo/sample.pdf  # bundled demo document (original content)
+```text
+├── Dockerfile                  # Multi-stage build: compiles React SPA and runs FastAPI
+├── render.yaml                 # Render Infrastructure-as-Code blueprint
+├── docker-compose.yml          # Local containerized orchestration
+├── .env.example                # Documented configuration template
+├── assets/
+│   └── demo/
+│       └── sample.pdf          # Bundled sample document for demo seeding
 ├── backend/
-│   ├── main.py             # FastAPI app, routes, SPA hosting
-│   ├── config.py           # all configuration, environment-driven
-│   ├── pdf_processor.py    # extraction + chunking
-│   ├── embedding_manager.py# embeddings, FAISS, BM25, hybrid retrieval
-│   ├── chat_engine.py      # prompting, SSE streaming, citation pruning
-│   ├── agent_engine.py     # LangGraph multi-hop agent
-│   ├── demo_seed.py        # boot-time sample indexing
-│   ├── auth.py database.py logger.py
-│   └── tests/              # 62 tests
-├── frontend/src/           # React SPA
-├── eval/                   # retrieval benchmark harness
-└── docs/                   # benchmark method, legacy architecture notes
+│   ├── main.py                 # FastAPI application, route controllers, and SPA hosting
+│   ├── config.py               # Environment variable parsing and default parameters
+│   ├── auth.py                 # JWT token generation, bcrypt hashing, and authentication
+│   ├── database.py             # SQLite WAL database schema, connection, and queries
+│   ├── logger.py               # Structured logging and RAG retrieval telemetry
+│   ├── pdf_processor.py        # PDF text extraction and chunking pipeline
+│   ├── document_processor.py   # Multi-format parsing (MD, TXT, HTML, DOCX, URLs)
+│   ├── embedding_manager.py    # OpenRouter embeddings, FAISS indices, and BM25 hybrid search
+│   ├── chat_engine.py          # SSE streaming, system prompts, and citation pruning
+│   ├── agent_engine.py         # LangGraph multi-hop StateGraph implementation
+│   ├── analytics_engine.py     # Background document summary and entity extraction
+│   ├── quiz_engine.py          # Automated assessment generation
+│   ├── compare_engine.py       # Cross-document comparison logic
+│   ├── reranker.py             # Deterministic lexical candidate reranker
+│   ├── verification.py         # Evidence gating and claim verification engine
+│   ├── demo_seed.py            # Startup indexing for demo document
+│   └── tests/                  # 317 automated pytest test cases
+├── frontend/
+│   ├── src/                    # React 19 application source code
+│   └── src/__tests__/          # 46 Vitest component and utility tests
+├── eval/
+│   ├── dataset.json            # 60 ground-truth labeled benchmark queries
+│   └── run_eval.py             # Retrieval benchmark evaluation runner
+└── docs/
+    ├── retrieval_benchmark.md  # 1,200-chunk empirical benchmark report
+    ├── interview-notes.md      # Technical interview preparation and architectural deep dive
+    └── v1_architecture_legacy.md # Architectural history and evolution
 ```
 
 ---
 
 ## License
 
-[MIT](LICENSE) · Built by Surya Sasank
+Distributed under the [MIT License](LICENSE). Built by Surya Sasank.

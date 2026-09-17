@@ -75,7 +75,7 @@ def create_and_save_index(chunks: List[Dict[str, Any]], doc_id: str) -> str:
     embeddings = get_embeddings_model()
     
     # Process up to 500 chunks in a single API call to minimize requests and maximize concurrency
-    BATCH_SIZE = 500
+    BATCH_SIZE = 700
     
     # Initialize FAISS with first batch
     first_batch = chunks[:BATCH_SIZE]
